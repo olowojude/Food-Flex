@@ -1,4 +1,0 @@
-- Git init to track my files
-- Install the necessary backend and frontend code
-- Store my environment variables in the env files
-- Create the necessary models, and 
