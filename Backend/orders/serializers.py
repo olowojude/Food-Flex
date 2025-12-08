@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Cart, CartItem, Order, OrderItem
+from .models import Cart, CartItem, Order, OrderItem, Product
 from shop.serializers import ProductListSerializer
 from accounts.serializers import UserProfileSerializer
 

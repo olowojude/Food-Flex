@@ -10,9 +10,13 @@ def create_user_dependencies(sender, instance, created, **kwargs):
     """
     Automatically create credit account and cart when a new buyer is created
     """
-    if created and instance.role == User.UserRole.BUYER:
-        # Create credit account
-        CreditAccount.objects.get_or_create(user=instance)
+    if created:
+        # Only create credit account and cart for BUYERS
+        if instance.role == User.UserRole.BUYER:
+            # Create credit account
+            CreditAccount.objects.get_or_create(user=instance)
+            
+            # Create shopping cart
+            Cart.objects.get_or_create(user=instance)
         
-        # Create shopping cart
-        Cart.objects.get_or_create(user=instance)
+        # Superusers and admins don't need credit accounts or carts
