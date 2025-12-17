@@ -1,21 +1,23 @@
+'use client';
+
 import './globals.css';
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
-
-export const metadata = {
-  title: 'FoodFlex - Credit-Based Grocery Marketplace',
-  description: 'Buy groceries on credit. Shop now, pay later with FoodFlex.',
-};
+// import { GoogleOAuthProvider } from '@react-oauth/google'; // TODO: Enable Google Sign-In later
 
 export default function RootLayout({ children }) {
+  // const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+
   return (
     <html lang="en">
       <body suppressHydrationWarning>
-        <AuthProvider>
-          <CartProvider>
-            {children}
-          </CartProvider>
-        </AuthProvider>
+        {/* <GoogleOAuthProvider clientId={googleClientId}> */}
+          <AuthProvider>
+            <CartProvider>
+              {children}
+            </CartProvider>
+          </AuthProvider>
+        {/* </GoogleOAuthProvider> */}
       </body>
     </html>
   );

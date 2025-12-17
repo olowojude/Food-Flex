@@ -36,23 +36,17 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const response = await authAPI.login({ email, password });
-      const { user, tokens } = response.data;
+      const { user: userData, tokens } = response.data;
 
       // Save tokens and user to cookies
       Cookies.set('access_token', tokens.access, { expires: 1 }); // 1 day
       Cookies.set('refresh_token', tokens.refresh, { expires: 7 }); // 7 days
-      Cookies.set('user', JSON.stringify(user), { expires: 7 });
+      Cookies.set('user', JSON.stringify(userData), { expires: 7 });
 
-      setUser(user);
+      setUser(userData);
 
-      // Redirect based on role
-      if (user.role === 'ADMIN') {
-        router.push('/admin/dashboard');
-      } else if (user.role === 'SELLER') {
-        router.push('/seller/dashboard');
-      } else {
-        router.push('/buyer/dashboard');
-      }
+      // Redirect to home page to browse products
+      router.push('/');
 
       return { success: true };
     } catch (error) {
@@ -68,15 +62,17 @@ export function AuthProvider({ children }) {
   const register = async (userData) => {
     try {
       const response = await authAPI.register(userData);
-      const { user, tokens } = response.data;
+      const { user: newUser, tokens } = response.data;
 
       // Save tokens and user to cookies
       Cookies.set('access_token', tokens.access, { expires: 1 });
       Cookies.set('refresh_token', tokens.refresh, { expires: 7 });
-      Cookies.set('user', JSON.stringify(user), { expires: 7 });
+      Cookies.set('user', JSON.stringify(newUser), { expires: 7 });
 
-      setUser(user);
-      router.push('/buyer/dashboard');
+      setUser(newUser);
+      
+      // Redirect to home page to start shopping
+      router.push('/');
 
       return { success: true };
     } catch (error) {
@@ -88,23 +84,40 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Logout function
-  const logout = async () => {
+  // Google Login function
+  const googleLogin = async (googleToken) => {
     try {
-      const refreshToken = Cookies.get('refresh_token');
-      if (refreshToken) {
-        await authAPI.logout(refreshToken);
-      }
+      const response = await authAPI.googleLogin({ token: googleToken });
+      const { user: userData, tokens } = response.data;
+
+      // Save tokens and user to cookies
+      Cookies.set('access_token', tokens.access, { expires: 1 });
+      Cookies.set('refresh_token', tokens.refresh, { expires: 7 });
+      Cookies.set('user', JSON.stringify(userData), { expires: 7 });
+
+      setUser(userData);
+
+      // Redirect to home page
+      router.push('/');
+
+      return { success: true };
     } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Clear cookies and state
-      Cookies.remove('access_token');
-      Cookies.remove('refresh_token');
-      Cookies.remove('user');
-      setUser(null);
-      router.push('/login');
+      console.error('Google login error:', error);
+      return {
+        success: false,
+        error: error.response?.data?.error || 'Google login failed',
+      };
     }
+  };
+
+  // Logout function
+  const logout = () => {
+    // Clear cookies and state
+    Cookies.remove('access_token');
+    Cookies.remove('refresh_token');
+    Cookies.remove('user');
+    setUser(null);
+    router.push('/login');
   };
 
   // Update user profile
@@ -148,6 +161,7 @@ export function AuthProvider({ children }) {
     loading,
     login,
     register,
+    googleLogin,
     logout,
     updateUser,
     refreshUser,

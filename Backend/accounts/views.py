@@ -13,35 +13,31 @@ from .serializers import (
 )
 from credits.models import CreditAccount
 from orders.models import Cart
+from google.oauth2 import id_token
+from google.auth.transport import requests
+from django.conf import settings
 
-
+#For user registration
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def register(request):
-    """User registration"""
     serializer = UserRegistrationSerializer(data=request.data)
     
     if serializer.is_valid():
-        with transaction.atomic():
-            user = serializer.save()
-            
-            # Create credit account for buyer
-            CreditAccount.objects.create(user=user)
-            
-            # Create cart for buyer
-            Cart.objects.create(user=user)
-            
-            # Generate JWT tokens
-            refresh = RefreshToken.for_user(user)
-            
-            return Response({
-                'message': 'Registration successful',
-                'user': UserProfileSerializer(user).data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token),
-                }
-            }, status=status.HTTP_201_CREATED)
+        # Saving the user like that - signals will handle the rest
+        user = serializer.save()
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'message': 'Registration successful',
+            'user': UserProfileSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            }
+        }, status=status.HTTP_201_CREATED)
     
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -335,4 +331,94 @@ def user_detail(request, user_id):
         return Response(
             {'error': 'User not found'},
             status=status.HTTP_404_NOT_FOUND
+        )
+    
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def google_login(request):
+    """Handle Google OAuth login/signup"""
+    token = request.data.get('token')
+    
+    if not token:
+        return Response(
+            {'error': 'Google token is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Verify the Google token
+        idinfo = id_token.verify_oauth2_token(
+            token, 
+            requests.Request(), 
+            settings.GOOGLE_CLIENT_ID
+        )
+        
+        # Check if token is from correct app
+        if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+            return Response(
+                {'error': 'Invalid token issuer'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Extract user info from Google
+        email = idinfo.get('email')
+        first_name = idinfo.get('given_name', '')
+        last_name = idinfo.get('family_name', '')
+        picture = idinfo.get('picture', '')
+        
+        if not email:
+            return Response(
+                {'error': 'Email not provided by Google'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        with transaction.atomic():
+            # Check if user exists
+            user, created = User.objects.get_or_create(
+                email=email,
+                defaults={
+                    'username': email.split('@')[0],
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'profile_image': picture,
+                    'is_verified': True,  # Google accounts are pre-verified
+                    'role': User.UserRole.BUYER
+                }
+            )
+            
+            # If user was just created, set up their account
+            if created:
+                # Set unusable password (they use Google OAuth)
+                user.set_unusable_password()
+                user.save()
+                
+                # Create credit account
+                CreditAccount.objects.create(user=user)
+                
+                # Create cart
+                Cart.objects.create(user=user)
+        
+        # Generate JWT tokens
+        refresh = RefreshToken.for_user(user)
+        
+        return Response({
+            'user': UserProfileSerializer(user).data,
+            'tokens': {
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            },
+            'is_new_user': created
+        }, status=status.HTTP_200_OK)
+        
+    except ValueError as e:
+        # Invalid token
+        return Response(
+            {'error': 'Invalid Google token'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
