@@ -103,7 +103,6 @@ export default function RegisterPage() {
               <UserPlus className="w-8 h-8 text-blue-600" />
             </div>
             <h1 className="text-3xl font-bold text-gray-900">Create Account</h1>
-            <p className="text-gray-600 mt-2">Get ₦50,000 instant credit!</p>
           </div>
 
           {errors.general && (
@@ -157,7 +156,7 @@ export default function RegisterPage() {
             </div>
 
             <Input
-              label="Phone Number (Optional)"
+              label="Phone Number"
               name="phone_number"
               type="tel"
               value={formData.phone_number}
@@ -206,29 +205,6 @@ export default function RegisterPage() {
               </Link>
             </p>
           </div>
-        </div>
-
-        {/* Benefits */}
-        <div className="mt-6 card p-4">
-          <h3 className="font-semibold text-gray-900 mb-3 text-center">What you get:</h3>
-          <ul className="space-y-2 text-sm text-gray-600">
-            <li className="flex items-center gap-2">
-              <span className="text-green-600">✓</span>
-              ₦50,000 instant shopping credit
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-600">✓</span>
-              Shop from thousands of products
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-600">✓</span>
-              Flexible repayment terms
-            </li>
-            <li className="flex items-center gap-2">
-              <span className="text-green-600">✓</span>
-              Secure QR code pickups
-            </li>
-          </ul>
         </div>
       </div>
     </div>

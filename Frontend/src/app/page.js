@@ -69,9 +69,9 @@ export default function HomePage() {
                       <Link href="/orders" className="text-gray-700 hover:text-blue-600">
                         Orders
                       </Link>
-                      <Link href="/credit" className="flex items-center gap-1 text-gray-700 hover:text-blue-600">
-                        <CreditCard className="w-4 h-4" />
-                        Credit
+                      <Link href="/profile" className="flex items-center gap-1 text-gray-700 hover:text-blue-600">
+                        <User className="w-4 h-4" />
+                        Profile
                       </Link>
                     </>
                   )}
@@ -134,8 +134,8 @@ export default function HomePage() {
                         <Link href="/orders" className="text-gray-700">
                           Orders
                         </Link>
-                        <Link href="/credit" className="text-gray-700">
-                          Credit
+                        <Link href="/profile" className="text-gray-700">
+                          Profile
                         </Link>
                       </>
                     )}
