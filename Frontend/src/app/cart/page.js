@@ -144,7 +144,7 @@ export default function CartPage() {
                           >
                             <Minus className="w-4 h-4" />
                           </button>
-                          <span className="px-4 py-2 font-semibold min-w-[3rem] text-center">
+                          <span className="px-4 py-2 font-semibold min-w-12 text-center">
                             {updatingItems[item.id] ? '...' : item.quantity}
                           </span>
                           <button

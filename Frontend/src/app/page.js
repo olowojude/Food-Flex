@@ -47,55 +47,57 @@ export default function HomePage() {
 
             {/* Desktop Menu */}
             <div className="hidden md:flex items-center gap-6">
-              <Link href="/" className="text-gray-700 hover:text-blue-600">
-                Home
+              <Link href="/" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                <span>🏠</span>
+                <span>Home</span>
               </Link>
-              <Link href="/products" className="text-gray-700 hover:text-blue-600">
-                Products
+              <Link href="/products" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                <span>🛍️</span>
+                <span>Products</span>
               </Link>
 
               {isAuthenticated ? (
                 <>
                   {user?.role === 'BUYER' && (
                     <>
-                      <Link href="/cart" className="relative">
-                        <ShoppingCart className="w-6 h-6 text-gray-700 hover:text-blue-600" />
+                      <Link href="/cart" className="relative flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                        <span>🛒</span>
+                        <span>Cart</span>
                         {itemCount > 0 && (
                           <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
                             {itemCount}
                           </span>
                         )}
                       </Link>
-                      <Link href="/orders" className="text-gray-700 hover:text-blue-600">
-                        Orders
-                      </Link>
-                      <Link href="/profile" className="flex items-center gap-1 text-gray-700 hover:text-blue-600">
-                        <User className="w-4 h-4" />
-                        Profile
+                      <Link href="/orders" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                        <span>📦</span>
+                        <span>Orders</span>
                       </Link>
                     </>
                   )}
 
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm text-gray-600">
-                      Hi, {user?.first_name}
-                    </span>
-                    <button
-                      onClick={logout}
-                      className="text-gray-700 hover:text-red-600"
-                      title="Logout"
-                    >
-                      <LogOut className="w-5 h-5" />
-                    </button>
-                  </div>
+                  <Link href="/profile" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                    <span>👤</span>
+                    <span>Profile</span>
+                  </Link>
+
+                  <button
+                    onClick={logout}
+                    className="flex items-center gap-2 text-gray-700 hover:text-red-600 transition"
+                  >
+                    <span>🚪</span>
+                    <span>Logout</span>
+                  </button>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="text-gray-700 hover:text-blue-600">
-                    Login
+                  <Link href="/login" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition">
+                    <span>🔑</span>
+                    <span>Login</span>
                   </Link>
-                  <Link href="/register" className="btn-primary">
-                    Sign Up
+                  <Link href="/register" className="btn-primary flex items-center gap-2">
+                    <span>✨</span>
+                    <span>Sign Up</span>
                   </Link>
                 </>
               )}
@@ -161,7 +163,7 @@ export default function HomePage() {
 
       {/* Hero Section (Only show if NOT authenticated) */}
       {!isAuthenticated && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-20">
+        <div className="bg-linear-to-br from-blue-600 to-indigo-700 text-white py-20">
           <div className="container mx-auto px-4 text-center">
             <h1 className="text-5xl font-bold mb-4">Welcome to FoodFlex</h1>
             <p className="text-xl mb-8">Get ₦50,000 instant credit. Shop now, pay later!</p>
