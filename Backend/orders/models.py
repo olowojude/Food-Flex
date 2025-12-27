@@ -207,7 +207,7 @@ class Order(models.Model):
             raise Exception(f"QR code generation failed: {str(e)}")
     
     def confirm_order(self, confirmed_by_seller):
-        """Seller confirms order after scanning QR"""
+        """Seller confirms order after scanning QR (stock already reduced at checkout)"""
         from django.utils import timezone
         
         if self.status != self.OrderStatus.PENDING:
@@ -221,7 +221,10 @@ class Order(models.Model):
         self.save()
     
     def complete_order(self):
-        """Complete order and transfer earnings to seller"""
+        """
+        Complete order and transfer earnings to seller
+        Stock was ALREADY reduced at checkout, so no stock manipulation here
+        """
         from django.utils import timezone
         
         if self.status != self.OrderStatus.CONFIRMED:
@@ -232,33 +235,53 @@ class Order(models.Model):
         self.completed_at = timezone.now()
         self.save()
         
-        # Reduce product stock
-        for item in self.items.all():
-            item.product.reduce_stock(item.quantity)
-        
-        # Transfer earnings to seller
+        # Stock was already reduced at checkout, so we don't touch it here
+        # Just transfer earnings to seller
         seller_profile = self.seller.seller_profile
         seller_profile.add_earnings(self.total_amount)
         seller_profile.increment_order_count()
     
     def cancel_order(self, reason=''):
-        """Cancel order and refund credit to buyer"""
+        """
+        Cancel order and refund credit to buyer
+        ✅ RESTORE STOCK because it was reduced at checkout
+        """
         if self.status in [self.OrderStatus.COMPLETED, self.OrderStatus.CANCELLED]:
             raise ValueError(f"Cannot cancel order with status: {self.status}")
+        
+        # ✅ RESTORE STOCK - Add back the quantities that were reduced at checkout
+        for item in self.items.all():
+            if item.product:  # Check product still exists
+                item.product.stock_quantity += item.quantity
+                item.product.save(update_fields=['stock_quantity'])
         
         # Refund credit to buyer
         credit_account = self.buyer.credit_account
         credit_account.credit_balance += self.total_amount
         credit_account.total_credit_used -= self.total_amount
         
+        # If loan was exhausted, make it active again
         if credit_account.loan_status == 'EXHAUSTED':
             credit_account.loan_status = 'ACTIVE'
         
         credit_account.save()
         
+        # Log refund transaction
+        from credits.models import CreditTransaction
+        CreditTransaction.objects.create(
+            credit_account=credit_account,
+            transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
+            amount=self.total_amount,
+            balance_before=credit_account.credit_balance - self.total_amount,
+            balance_after=credit_account.credit_balance,
+            description=f"Refund - Order {self.order_number} cancelled: {reason}",
+            reference=self.order_number
+        )
+        
         # Update order status
         self.status = self.OrderStatus.CANCELLED
-        self.notes = f"Cancelled: {reason}"
+        if reason:
+            self.notes = f"Cancelled: {reason}"
         self.save()
 
 

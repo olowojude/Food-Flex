@@ -35,7 +35,7 @@ def my_cart(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_to_cart(request):
-    """Add product to cart"""
+    """Add product to cart - DOES NOT reduce stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -53,7 +53,7 @@ def add_to_cart(request):
         try:
             product = Product.objects.get(id=product_id, is_active=True)
             
-            # Check stock
+            # Check stock availability (but don't reduce it)
             if quantity > product.stock_quantity:
                 return Response(
                     {'error': f'Only {product.stock_quantity} units available'},
@@ -102,7 +102,7 @@ def add_to_cart(request):
 @api_view(['PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def update_cart_item(request, item_id):
-    """Update cart item quantity"""
+    """Update cart item quantity - DOES NOT affect stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -118,7 +118,7 @@ def update_cart_item(request, item_id):
             cart_item = CartItem.objects.get(id=item_id, cart__user=user)
             quantity = serializer.validated_data['quantity']
             
-            # Check stock
+            # Check stock availability (but don't reduce it)
             if quantity > cart_item.product.stock_quantity:
                 return Response(
                     {'error': f'Only {cart_item.product.stock_quantity} units available'},
@@ -148,7 +148,7 @@ def update_cart_item(request, item_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def remove_from_cart(request, item_id):
-    """Remove item from cart"""
+    """Remove item from cart - DOES NOT restore stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -160,6 +160,8 @@ def remove_from_cart(request, item_id):
     try:
         cart_item = CartItem.objects.get(id=item_id, cart__user=user)
         cart = cart_item.cart
+        
+        # Simply delete the cart item - no stock manipulation
         cart_item.delete()
         
         return Response(
@@ -180,7 +182,7 @@ def remove_from_cart(request, item_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def clear_cart(request):
-    """Clear all items from cart"""
+    """Clear all items from cart - DOES NOT restore stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -209,7 +211,10 @@ def clear_cart(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def checkout(request):
-    """Checkout and create order"""
+    """
+    Checkout and create order
+    ⚠️ STOCK IS REDUCED HERE IMMEDIATELY - Prevents double purchases
+    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -246,12 +251,28 @@ def checkout(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Verify stock for all items
+            # Verify stock for all items AND reduce stock immediately
             for cart_item in cart.items.all():
+                # Refresh product data from DB to get latest stock
+                cart_item.product.refresh_from_db()
+                
                 if cart_item.quantity > cart_item.product.stock_quantity:
                     return Response(
                         {
                             'error': f'Insufficient stock for {cart_item.product.name}',
+                            'available': cart_item.product.stock_quantity,
+                            'requested': cart_item.quantity
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # ✅ REDUCE STOCK IMMEDIATELY AT CHECKOUT
+                success = cart_item.product.reduce_stock(cart_item.quantity)
+                if not success:
+                    # Rollback will happen automatically due to transaction.atomic()
+                    return Response(
+                        {
+                            'error': f'Failed to reserve stock for {cart_item.product.name}',
                             'available': cart_item.product.stock_quantity
                         },
                         status=status.HTTP_400_BAD_REQUEST
@@ -269,7 +290,7 @@ def checkout(request):
                 status=Order.OrderStatus.PENDING
             )
             
-            # Create order items
+            # Create order items (snapshot of products at order time)
             for cart_item in cart.items.all():
                 OrderItem.objects.create(
                     order=order,
@@ -277,11 +298,11 @@ def checkout(request):
                     quantity=cart_item.quantity
                 )
             
-            # Deduct credit
+            # Deduct credit from buyer
             old_balance = credit_account.credit_balance
             credit_account.deduct_credit(total_amount)
             
-            # Log transaction
+            # Log credit transaction
             CreditTransaction.objects.create(
                 credit_account=credit_account,
                 transaction_type=CreditTransaction.TransactionType.PURCHASE,
@@ -402,7 +423,7 @@ def confirm_order(request, order_id):
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
             
-            # Confirm order
+            # Confirm order (stock already reduced at checkout)
             order.confirm_order(user)
             
             return Response(
@@ -428,7 +449,10 @@ def confirm_order(request, order_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def complete_order(request, order_id):
-    """Seller completes order"""
+    """
+    Seller completes order
+    Stock was already reduced at checkout, just pay seller now
+    """
     user = request.user
     
     if user.role != 'SELLER':
@@ -441,7 +465,7 @@ def complete_order(request, order_id):
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
             
-            # Complete order
+            # Complete order (stock already reduced, just transfer earnings)
             order.complete_order()
             
             return Response(
@@ -467,57 +491,58 @@ def complete_order(request, order_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_orders(request):
-    """Buyer views their orders"""
+    """
+    Unified view for orders - works for both buyers and sellers
+    Automatically detects user role and returns appropriate orders
+    """
     user = request.user
     
-    if user.role != 'BUYER':
+    # Determine which orders to fetch based on role
+    if user.role == 'BUYER':
+        orders = Order.objects.filter(buyer=user).select_related('seller', 'buyer').prefetch_related('items__product')
+    elif user.role == 'SELLER':
+        orders = Order.objects.filter(seller=user).select_related('seller', 'buyer').prefetch_related('items__product')
+    elif user.is_admin_user:
+        orders = Order.objects.all().select_related('seller', 'buyer').prefetch_related('items__product')
+    else:
         return Response(
-            {'error': 'Only buyers can view their orders'},
+            {'error': 'Invalid user role'},
             status=status.HTTP_403_FORBIDDEN
         )
     
-    orders = Order.objects.filter(buyer=user)
+    # Order by newest first
+    orders = orders.order_by('-created_at')
     
-    # Filter by status
+    # Filter by status if provided
     order_status = request.query_params.get('status')
     if order_status:
-        orders = orders.filter(status=order_status)
+        orders = orders.filter(status=order_status.upper())
     
     # Pagination
     paginator = PageNumberPagination()
     paginator.page_size = 20
     paginated_orders = paginator.paginate_queryset(orders, request)
     
-    serializer = OrderListSerializer(paginated_orders, many=True)
-    return paginator.get_paginated_response(serializer.data)
+    if paginated_orders is not None:
+        serializer = OrderListSerializer(paginated_orders, many=True)
+        return paginator.get_paginated_response(serializer.data)
+    
+    serializer = OrderListSerializer(orders, many=True)
+    return Response({
+        'count': orders.count(),
+        'results': serializer.data
+    }, status=status.HTTP_200_OK)
 
 
+# Keep seller_orders for backward compatibility, but make it use my_orders logic
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def seller_orders(request):
-    """Seller views their orders"""
-    user = request.user
-    
-    if user.role != 'SELLER':
-        return Response(
-            {'error': 'Only sellers can view their orders'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    orders = Order.objects.filter(seller=user)
-    
-    # Filter by status
-    order_status = request.query_params.get('status')
-    if order_status:
-        orders = orders.filter(status=order_status)
-    
-    # Pagination
-    paginator = PageNumberPagination()
-    paginator.page_size = 20
-    paginated_orders = paginator.paginate_queryset(orders, request)
-    
-    serializer = OrderListSerializer(paginated_orders, many=True)
-    return paginator.get_paginated_response(serializer.data)
+    """
+    Seller views their orders (backward compatibility)
+    Now just redirects to my_orders which handles both roles
+    """
+    return my_orders(request)
 
 
 @api_view(['GET'])

@@ -22,6 +22,26 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             'last_name': {'required': True},
         }
     
+    def validate_email(self, value):
+        """change email to lowercase and check uniqueness (case-insensitive)"""
+        email = value.lower().strip()
+        
+        # Check if email already exists (case-insensitive)
+        if User.objects.filter(email__iexact=email).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        
+        return email
+    
+    def validate_username(self, value):
+        """Change username to lowercase and check uniqueness (case-insensitive)"""
+        username = value.lower().strip()
+        
+        # Check if username already exists (case-insensitive)
+        if User.objects.filter(username__iexact=username).exists():
+            raise serializers.ValidationError("A user with this username already exists.")
+        
+        return username
+    
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
             raise serializers.ValidationError({
@@ -31,6 +51,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         validated_data.pop('password2')
+        
+        # Ensure email and username are lowercase
+        validated_data['email'] = validated_data['email'].lower().strip()
+        validated_data['username'] = validated_data['username'].lower().strip()
+        
         user = User.objects.create_user(
             username=validated_data['username'],
             email=validated_data['email'],
@@ -52,9 +77,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'username', 'email', 'first_name', 'last_name',
             'full_name', 'phone_number', 'role', 'profile_image',
             'address', 'is_verified', 'is_seller_approved',
-            'created_at'
+            'date_joined'
         ]
-        read_only_fields = ['id', 'username', 'email', 'role', 'is_verified', 'is_seller_approved']
+        read_only_fields = ['id', 'username', 'email', 'role', 'is_verified', 'is_seller_approved', 'date_joined']
     
     def get_full_name(self, obj):
         return obj.get_full_name()
@@ -67,13 +92,13 @@ class SellerProfileSerializer(serializers.ModelSerializer):
         model = SellerProfile
         fields = [
             'id', 'user', 'business_name', 'business_description',
-            'business_address', 'business_phone', 'wallet_balance',
+            'business_address', 'wallet_balance',
             'total_earnings', 'total_products', 'total_orders_fulfilled',
-            'is_verified', 'verified_at', 'created_at'
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
             'wallet_balance', 'total_earnings', 'total_products',
-            'total_orders_fulfilled', 'is_verified', 'verified_at'
+            'total_orders_fulfilled', 'created_at', 'updated_at'
         ]
 
 
@@ -81,7 +106,6 @@ class SellerApplicationSerializer(serializers.Serializer):
     business_name = serializers.CharField(max_length=255)
     business_description = serializers.CharField()
     business_address = serializers.CharField()
-    business_phone = serializers.CharField(max_length=17)
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):

@@ -21,6 +21,7 @@ ALLOWED_HOSTS = env('ALLOWED_HOSTS').split(',')
 
 # Application definition
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -49,6 +50,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'accounts.middleware.AdminRoleMiddleware',  # Custom middleware to enforce ADMIN role
 ]
 
 ROOT_URLCONF = 'foodflex.urls'
@@ -190,3 +192,81 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+# Add Jazzmin Configuration (Customize to your liking)
+JAZZMIN_SETTINGS = {
+    # Site branding
+    "site_title": "FoodFlex Admin",
+    "site_header": "FoodFlex",
+    "site_brand": "FoodFlex Management",
+    "site_logo": None,  # Add your logo URL here if you have one
+    "welcome_sign": "Welcome to FoodFlex Admin Panel",
+    "copyright": "FoodFlex 2024",
+    
+    # Search bar
+    "search_model": ["accounts.User", "shop.Product", "orders.Order"],
+    
+    # Top menu links
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+        {"name": "View Site", "url": "http://localhost:3000", "new_window": True},
+    ],
+    
+    # User menu links
+    "usermenu_links": [
+        {"model": "accounts.user"},
+    ],
+    
+    # Side menu ordering (customize the order and grouping)
+    "order_with_respect_to": [
+        "accounts", 
+        "shop", 
+        "orders", 
+        "credits"
+    ],
+    
+    # Custom icons (using Font Awesome)
+    "icons": {
+        "accounts.user": "fas fa-users",
+        "accounts.sellerprofile": "fas fa-store",
+        "shop.category": "fas fa-folder",
+        "shop.product": "fas fa-box",
+        "shop.productreview": "fas fa-star",
+        "orders.order": "fas fa-shopping-cart",
+        "orders.cart": "fas fa-shopping-basket",
+        "credits.creditaccount": "fas fa-credit-card",
+        "credits.repaymenthistory": "fas fa-money-bill-wave",
+    },
+    
+    # Hide these apps/models if needed
+    "hide_apps": [],
+    "hide_models": [],
+    
+    # Show related models
+    "related_modal_active": True,
+    
+    # UI tweaks
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "changeform_format": "horizontal_tabs",  # or "vertical_tabs", "collapsible", "carousel"
+}
+
+# Optional: Customize UI colors
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-primary",
+    "accent": "accent-primary",
+    "navbar": "navbar-dark",
+    "no_navbar_border": False,
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": False,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "theme": "default",  # "cerulean", "cosmo", "cyborg", "darkly", "flatly", etc.
+}

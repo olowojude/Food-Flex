@@ -1,31 +1,43 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+/**
+ * Profile Page with Working Image Upload (Phone Number Read-Only)
+ * Path: frontend/src/app/profile/page.js (REPLACE)
+ */
+
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { creditAPI } from '@/lib/api';
+import { creditAPI, orderAPI } from '@/lib/api';
+import { uploadImage } from '@/lib/cloudinary';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
+import Toast from '@/components/common/Toast';
 import { 
   User, Mail, Phone, MapPin, CreditCard, DollarSign, 
-  TrendingDown, Calendar, Camera, Lock, CheckCircle 
+  TrendingDown, Calendar, Camera, Lock, CheckCircle,
+  Package, ShoppingBag, Eye, Upload
 } from 'lucide-react';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, isAuthenticated, updateUser } = useAuth();
+  const { user, isAuthenticated, isBuyer, updateUser } = useAuth();
+  const fileInputRef = useRef(null);
+  
   const [creditAccount, setCreditAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
-  const [activeTab, setActiveTab] = useState('personal'); // personal, credit, security
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [activeTab, setActiveTab] = useState('personal');
   
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
-    phone_number: '',
     address: '',
     profile_image: '',
   });
@@ -38,7 +50,6 @@ export default function ProfilePage() {
       setFormData({
         first_name: user?.first_name || '',
         last_name: user?.last_name || '',
-        phone_number: user?.phone_number || '',
         address: user?.address || '',
         profile_image: user?.profile_image || '',
       });
@@ -49,12 +60,14 @@ export default function ProfilePage() {
     try {
       setLoading(true);
       if (user?.role === 'BUYER') {
-        const [creditRes, transactionsRes] = await Promise.all([
+        const [creditRes, transactionsRes, ordersRes] = await Promise.all([
           creditAPI.getMyCreditAccount(),
           creditAPI.getMyCreditTransactions(),
+          orderAPI.getMyOrders(),
         ]);
         setCreditAccount(creditRes.data);
-        setTransactions(transactionsRes.data.slice(0, 5)); // Latest 5 transactions
+        setTransactions(transactionsRes.data.slice(0, 5));
+        setOrders(ordersRes.data.results?.slice(0, 5) || ordersRes.data.slice(0, 5));
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -63,31 +76,78 @@ export default function ProfilePage() {
     }
   };
 
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  // Handle profile image upload
+  const handleImageClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file', 'error');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image size must be less than 5MB', 'error');
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+      showToast('Uploading image...', 'warning');
+
+      // Upload to Cloudinary
+      const imageUrl = await uploadImage(file, 'profiles');
+      
+      // Update form data
+      setFormData(prev => ({ ...prev, profile_image: imageUrl }));
+      
+      // Auto-save profile image
+      const result = await updateUser({ profile_image: imageUrl });
+      
+      if (result.success) {
+        showToast('Profile picture updated successfully!', 'success');
+      } else {
+        showToast('Failed to update profile picture', 'error');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      showToast('Failed to upload image. Please try again.', 'error');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage({ type: '', text: '' });
     setUpdating(true);
 
     const result = await updateUser(formData);
     setUpdating(false);
 
     if (result.success) {
-      setMessage({ type: 'success', text: 'Profile updated successfully!' });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      showToast('Profile updated successfully!', 'success');
     } else {
-      setMessage({ type: 'error', text: result.error || 'Failed to update profile' });
+      showToast(result.error || 'Failed to update profile', 'error');
     }
   };
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
+  if (!isAuthenticated) return null;
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -103,48 +163,68 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">My Profile</h1>
-          <p className="text-gray-600">Manage your account settings and preferences</p>
+          <p className="text-gray-600">Manage your account, orders, and credit</p>
         </div>
-
-        {/* Message */}
-        {message.text && (
-          <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-            message.type === 'success' 
-              ? 'bg-green-50 border border-green-200 text-green-700' 
-              : 'bg-red-50 border border-red-200 text-red-700'
-          }`}>
-            {message.type === 'success' && <CheckCircle className="w-5 h-5" />}
-            <span>{message.text}</span>
-          </div>
-        )}
 
         <div className="grid lg:grid-cols-4 gap-6">
           {/* Sidebar */}
           <div className="lg:col-span-1">
-            <div className="card p-6 sticky top-4">
-              {/* Profile Picture */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-4">
+              {/* Profile Picture with Upload */}
               <div className="text-center mb-6">
                 <div className="relative inline-block">
-                  <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 overflow-hidden">
                     {formData.profile_image ? (
                       <img
                         src={formData.profile_image}
                         alt="Profile"
-                        className="w-24 h-24 rounded-full object-cover"
+                        className="w-full h-full object-cover"
                       />
                     ) : (
                       <User className="w-12 h-12 text-blue-600" />
                     )}
                   </div>
-                  <button className="absolute bottom-2 right-0 bg-white p-2 rounded-full shadow-lg border border-gray-200 hover:bg-gray-50">
-                    <Camera className="w-4 h-4 text-gray-600" />
+                  
+                  {/* Upload Button */}
+                  <button
+                    type="button"
+                    onClick={handleImageClick}
+                    disabled={uploadingImage}
+                    className="absolute bottom-2 right-0 bg-white p-2 rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {uploadingImage ? (
+                      <LoadingSpinner size="sm" />
+                    ) : (
+                      <Camera className="w-4 h-4 text-gray-600" />
+                    )}
                   </button>
+                  
+                  {/* Hidden File Input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
                 </div>
-                <h3 className="font-semibold text-gray-900">{user?.first_name} {user?.last_name}</h3>
+                
+                <h3 className="font-semibold text-gray-900">
+                  {user?.first_name} {user?.last_name}
+                </h3>
                 <p className="text-sm text-gray-600">{user?.email}</p>
                 <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
                   {user?.role}
@@ -155,7 +235,10 @@ export default function ProfilePage() {
               <div className="space-y-1">
                 {[
                   { id: 'personal', label: 'Personal Info', icon: User },
-                  ...(user?.role === 'BUYER' ? [{ id: 'credit', label: 'Credit Info', icon: CreditCard }] : []),
+                  ...(isBuyer ? [
+                    { id: 'orders', label: 'My Orders', icon: Package },
+                    { id: 'credit', label: 'Credit Info', icon: CreditCard }
+                  ] : []),
                   { id: 'security', label: 'Security', icon: Lock },
                 ].map((tab) => (
                   <button
@@ -179,7 +262,7 @@ export default function ProfilePage() {
           <div className="lg:col-span-3">
             {/* Personal Info Tab */}
             {activeTab === 'personal' && (
-              <div className="card p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">Personal Information</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div className="grid md:grid-cols-2 gap-4">
@@ -210,11 +293,9 @@ export default function ProfilePage() {
 
                   <Input
                     label="Phone Number"
-                    name="phone_number"
-                    type="tel"
-                    value={formData.phone_number}
-                    onChange={handleChange}
-                    placeholder="+2348012345678"
+                    value={user?.phone_number || 'Not provided'}
+                    disabled
+                    className="bg-gray-50"
                   />
 
                   <Input
@@ -229,24 +310,72 @@ export default function ProfilePage() {
                     <Button type="submit" variant="primary" loading={updating}>
                       Save Changes
                     </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => router.back()}
-                    >
-                      Cancel
-                    </Button>
                   </div>
                 </form>
               </div>
             )}
 
+            {/* Orders Tab */}
+            {activeTab === 'orders' && isBuyer && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-xl font-semibold text-gray-900">My Orders</h2>
+                  <Link href="/orders" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                    View All →
+                  </Link>
+                </div>
+
+                {orders.length > 0 ? (
+                  <div className="space-y-4">
+                    {orders.map((order) => (
+                      <Link
+                        key={order.id}
+                        href={`/orders/${order.id}`}
+                        className="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="font-semibold text-gray-900">Order #{order.order_number}</p>
+                            <p className="text-sm text-gray-600">
+                              {new Date(order.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                            order.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800' :
+                            order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-gray-600">Total</span>
+                          <span className="font-bold text-gray-900">
+                            ₦{parseFloat(order.total_amount).toLocaleString()}
+                          </span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Package className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                    <p className="text-gray-600">No orders yet</p>
+                    <Link href="/products" className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-2 inline-block">
+                      Start Shopping →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Credit Info Tab */}
-            {activeTab === 'credit' && user?.role === 'BUYER' && (
+            {activeTab === 'credit' && isBuyer && (
               <div className="space-y-6">
                 {/* Credit Overview */}
                 <div className="grid md:grid-cols-3 gap-6">
-                  <div className="card p-6">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-600">Available Credit</p>
                       <DollarSign className="w-5 h-5 text-green-600" />
@@ -259,7 +388,7 @@ export default function ProfilePage() {
                     </p>
                   </div>
 
-                  <div className="card p-6">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-600">Credit Limit</p>
                       <CreditCard className="w-5 h-5 text-blue-600" />
@@ -270,7 +399,7 @@ export default function ProfilePage() {
                     <p className="text-xs text-gray-500 mt-2">Maximum capacity</p>
                   </div>
 
-                  <div className="card p-6">
+                  <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-600">Outstanding</p>
                       <TrendingDown className="w-5 h-5 text-red-600" />
@@ -283,18 +412,16 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Credit Status */}
-                <div className="card p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Credit Status</h3>
                   <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <span className={`badge ${
-                        creditAccount?.loan_status === 'ACTIVE' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      } text-base px-4 py-2`}>
-                        {creditAccount?.loan_status}
-                      </span>
-                    </div>
+                    <span className={`px-4 py-2 rounded-full text-base font-medium ${
+                      creditAccount?.loan_status === 'ACTIVE' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {creditAccount?.loan_status}
+                    </span>
                     <div className="text-right">
                       <p className="text-sm text-gray-600">Usage</p>
                       <p className="text-2xl font-bold text-gray-900">{usagePercentage}%</p>
@@ -316,12 +443,12 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Recent Transactions */}
-                <div className="card p-6">
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>
-                    <button className="text-sm text-blue-600 hover:text-blue-700">
-                      View All
-                    </button>
+                    <Link href="/credit" className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                      View All →
+                    </Link>
                   </div>
                   {transactions.length > 0 ? (
                     <div className="space-y-3">
@@ -368,11 +495,10 @@ export default function ProfilePage() {
 
             {/* Security Tab */}
             {activeTab === 'security' && (
-              <div className="card p-6">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">Security Settings</h2>
                 
                 <div className="space-y-6">
-                  {/* Change Password */}
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-4">Change Password</h3>
                     <p className="text-sm text-gray-600 mb-4">
@@ -383,7 +509,6 @@ export default function ProfilePage() {
                     </Button>
                   </div>
 
-                  {/* Account Info */}
                   <div className="pt-6 border-t">
                     <h3 className="font-semibold text-gray-900 mb-4">Account Information</h3>
                     <div className="space-y-3 text-sm">

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * Fixed CartContext - Clear cart now updates navbar badge
+ * Save as: frontend/src/context/CartContext.jsx (REPLACE)
+ */
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import { cartAPI } from '@/lib/api';
 import { useAuth } from './AuthContext';
@@ -78,11 +83,18 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Clear entire cart
+  // Clear entire cart - FIXED VERSION
   const clearCart = async () => {
     try {
       await cartAPI.clearCart();
-      setCart({ ...cart, items: [], total_items: 0, subtotal: 0 });
+      
+      // Option 1: Refetch cart from backend (recommended - ensures sync)
+      await fetchCart();
+      
+      // Option 2: Update local state immediately (faster UI response)
+      // Uncomment this and comment out fetchCart() if you prefer instant update
+      // setCart(prev => ({ ...prev, items: [], total_items: 0, subtotal: '0.00' }));
+      
       return { success: true, message: 'Cart cleared' };
     } catch (error) {
       console.error('Error clearing cart:', error);

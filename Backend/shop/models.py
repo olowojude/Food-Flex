@@ -1,28 +1,21 @@
 from django.db import models
 from django.utils.text import slugify
-from django.core.validators import MinValueValidator
 from accounts.models import User
 
 
 class Category(models.Model):
-    """Product categories"""
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=120, unique=True, blank=True)
-    description = models.TextField(blank=True)
-    image = models.URLField(blank=True, null=True)
-    
+    """Product Category - NO IMAGE FIELD"""
+    name = models.CharField(max_length=255, unique=True)
+    slug = models.SlugField(max_length=255, unique=True, blank=True)
+    description = models.TextField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'categories'
+        verbose_name = 'Category'
         verbose_name_plural = 'Categories'
         ordering = ['name']
-        indexes = [
-            models.Index(fields=['slug']),
-            models.Index(fields=['is_active']),
-        ]
     
     def __str__(self):
         return self.name
@@ -31,10 +24,26 @@ class Category(models.Model):
         if not self.slug:
             self.slug = slugify(self.name)
         super().save(*args, **kwargs)
+    
+    @property
+    def product_count(self):
+        """Count products in this category"""
+        return self.products.filter(is_active=True).count()
 
 
 class Product(models.Model):
-    """Products listed by sellers"""
+    """Product Model"""
+    
+    UNIT_CHOICES = (
+        ('kg', 'Kilogram'),
+        ('g', 'Gram'),
+        ('l', 'Liter'),
+        ('ml', 'Milliliter'),
+        ('piece', 'Piece'),
+        ('pack', 'Pack'),
+        ('bag', 'Bag'),
+    )
+    
     seller = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -47,60 +56,44 @@ class Product(models.Model):
         null=True,
         related_name='products'
     )
-    
     name = models.CharField(max_length=255)
-    slug = models.SlugField(max_length=280, blank=True)
+    slug = models.SlugField(max_length=255, unique=True, blank=True)
     description = models.TextField()
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    stock_quantity = models.IntegerField(default=0)
+    weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='kg')
     
-    price = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        validators=[MinValueValidator(0.01)]
-    )
-    
-    stock_quantity = models.PositiveIntegerField(
-        default=0,
-        validators=[MinValueValidator(0)]
-    )
-    
-    # Images - URLs uploaded from frontend
-    main_image = models.URLField()
+    # Images (URLs only)
+    main_image = models.URLField(max_length=500)
     additional_images = models.JSONField(default=list, blank=True)
     
-    # Product attributes (optional)
-    weight = models.CharField(max_length=50, blank=True, help_text="e.g., 1kg, 500g")
-    unit = models.CharField(max_length=20, blank=True, help_text="e.g., pack, piece, kg")
-    
-    # Status
+    # Settings
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     
     # Statistics
-    views_count = models.PositiveIntegerField(default=0)
-    sales_count = models.PositiveIntegerField(default=0)
+    views_count = models.IntegerField(default=0)
+    sales_count = models.IntegerField(default=0)
     
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'products'
+        verbose_name = 'Product'
+        verbose_name_plural = 'Products'
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['seller', 'is_active']),
-            models.Index(fields=['category', 'is_active']),
-            models.Index(fields=['slug']),
-            models.Index(fields=['-created_at']),
-        ]
     
     def __str__(self):
-        return f"{self.name} - {self.seller.get_full_name()}"
+        return self.name
     
     def save(self, *args, **kwargs):
         if not self.slug:
             base_slug = slugify(self.name)
             slug = base_slug
             counter = 1
-            while Product.objects.filter(slug=slug).exists():
+            while Product.objects.filter(slug=slug).exclude(pk=self.pk).exists():
                 slug = f"{base_slug}-{counter}"
                 counter += 1
             self.slug = slug
@@ -108,30 +101,38 @@ class Product(models.Model):
     
     @property
     def is_in_stock(self):
-        """Check if product has available stock"""
         return self.stock_quantity > 0
     
     @property
     def formatted_price(self):
-        """Return formatted price with currency"""
         return f"₦{self.price:,.2f}"
     
+    @property
+    def average_rating(self):
+        """Calculate average rating from reviews"""
+        reviews = self.reviews.all()
+        if reviews.exists():
+            total = sum(review.rating for review in reviews)
+            return round(total / reviews.count(), 1)
+        return 0
+    
     def reduce_stock(self, quantity):
-        """Reduce stock after purchase"""
-        if quantity > self.stock_quantity:
-            raise ValueError(f"Insufficient stock. Available: {self.stock_quantity}")
-        self.stock_quantity -= quantity
-        self.sales_count += quantity
-        self.save()
+        """Reduce stock when order is completed"""
+        if self.stock_quantity >= quantity:
+            self.stock_quantity -= quantity
+            self.sales_count += quantity
+            self.save()
+            return True
+        return False
     
     def increment_views(self):
-        """Increment product views"""
+        """Increment view count"""
         self.views_count += 1
         self.save(update_fields=['views_count'])
 
 
 class ProductReview(models.Model):
-    """Product reviews by buyers"""
+    """Product Review Model"""
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,
@@ -143,23 +144,16 @@ class ProductReview(models.Model):
         related_name='reviews',
         limit_choices_to={'role': 'BUYER'}
     )
-    
-    rating = models.PositiveSmallIntegerField(
-        validators=[MinValueValidator(1)],
-        help_text="Rating from 1 to 5"
-    )
-    comment = models.TextField(blank=True)
-    
+    rating = models.IntegerField(choices=[(i, i) for i in range(1, 6)])
+    comment = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        db_table = 'product_reviews'
+        verbose_name = 'Product Review'
+        verbose_name_plural = 'Product Reviews'
         ordering = ['-created_at']
         unique_together = ['product', 'buyer']
-        indexes = [
-            models.Index(fields=['product', '-created_at']),
-        ]
     
     def __str__(self):
-        return f"{self.buyer.get_full_name()} - {self.product.name} ({self.rating}★)"
+        return f"{self.buyer.email} - {self.product.name} - {self.rating}★"

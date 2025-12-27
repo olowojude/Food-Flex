@@ -37,7 +37,7 @@ api.interceptors.response.use(
         const refreshToken = Cookies.get('refresh_token');
         if (refreshToken) {
           const response = await axios.post(
-            `${process.env.NEXT_PUBLIC_API_URL}/auth/token/refresh/`,
+            `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'}/accounts/token/refresh/`,
             { refresh: refreshToken }
           );
 
@@ -53,7 +53,9 @@ api.interceptors.response.use(
         Cookies.remove('access_token');
         Cookies.remove('refresh_token');
         Cookies.remove('user');
-        window.location.href = '/login';
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
         return Promise.reject(refreshError);
       }
     }
@@ -62,29 +64,28 @@ api.interceptors.response.use(
   }
 );
 
-
+// ============================================================================
 // AUTHENTICATION & USER PROFILE
-
+// ============================================================================
 export const authAPI = {
-  register: (data) => api.post('/auth/register/', data),
-  login: (data) => api.post('/auth/login/', data),
-  // googleLogin: (data) => api.post('/auth/google-login/', data), // TODO: Enable later
-  logout: (refreshToken) => api.post('/auth/logout/', { refresh_token: refreshToken }),
+  register: (data) => api.post('/accounts/register/', data),
+  login: (data) => api.post('/accounts/login/', data),
+  logout: (refreshToken) => api.post('/accounts/logout/', { refresh_token: refreshToken }),
   
   // User Profile
-  getProfile: () => api.get('/auth/profile/'),
-  updateProfile: (data) => api.put('/auth/profile/', data),
-  changePassword: (data) => api.post('/auth/profile/password/', data),
+  getProfile: () => api.get('/accounts/profile/'),
+  updateProfile: (data) => api.put('/accounts/profile/', data),
+  changePassword: (data) => api.post('/accounts/profile/password/', data),
   
-  // Seller/Business Profile (cleaner URLs)
-  applyForSeller: (data) => api.post('/auth/profile/business/apply/', data),
-  getSellerProfile: () => api.get('/auth/profile/business/'),
-  updateSellerProfile: (data) => api.put('/auth/profile/business/update/', data),
+  // Seller/Business Profile
+  applyForSeller: (data) => api.post('/accounts/profile/business/apply/', data),
+  getSellerProfile: () => api.get('/accounts/profile/business/'),
+  updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
 };
 
-
+// ============================================================================
 // SHOP - PRODUCTS & CATEGORIES
-
+// ============================================================================
 export const shopAPI = {
   // Categories
   getCategories: () => api.get('/shop/categories/'),
@@ -100,7 +101,7 @@ export const shopAPI = {
   updateProduct: (id, data) => api.put(`/shop/products/${id}/update/`, data),
   deleteProduct: (id) => api.delete(`/shop/products/${id}/delete/`),
   
-  // Seller Inventory (was "my-products", now cleaner)
+  // Seller Inventory
   getMyProducts: (params) => api.get('/shop/inventory/', { params }),
   
   // Reviews
@@ -110,8 +111,9 @@ export const shopAPI = {
   deleteReview: (reviewId) => api.delete(`/shop/reviews/${reviewId}/delete/`),
 };
 
-
+// ============================================================================
 // CART
+// ============================================================================
 export const cartAPI = {
   getCart: () => api.get('/orders/cart/'),
   addToCart: (data) => api.post('/orders/cart/add/', data),
@@ -120,8 +122,9 @@ export const cartAPI = {
   clearCart: () => api.delete('/orders/cart/clear/'),
 };
 
-
+// ============================================================================
 // ORDERS (Unified for Buyers & Sellers)
+// ============================================================================
 export const orderAPI = {
   // Checkout
   checkout: () => api.post('/orders/checkout/'),
@@ -137,16 +140,16 @@ export const orderAPI = {
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
 };
 
-
+// ============================================================================
 // CREDITS
-
+// ============================================================================
 export const creditAPI = {
-  // User Credit (removed "my-" prefix)
+  // User Credit
   getMyCreditAccount: () => api.get('/credits/account/'),
   getMyCreditTransactions: () => api.get('/credits/transactions/'),
   getMyRepaymentHistory: () => api.get('/credits/repayments/'),
   
-  // Management (was "admin")
+  // Management
   getAllCreditAccounts: (params) => api.get('/credits/accounts/', { params }),
   getCreditAccountDetail: (userId) => api.get(`/credits/accounts/${userId}/`),
   processRepayment: (userId, data) => api.post(`/credits/accounts/${userId}/repayment/`, data),
@@ -155,16 +158,22 @@ export const creditAPI = {
   getCreditLimitHistory: (params) => api.get('/credits/limit-history/', { params }),
 };
 
-
+// ============================================================================
 // ADMIN/MANAGEMENT
-
+// ============================================================================
 export const adminAPI = {
-  // User Management (removed "admin/" prefix)
-  getAllUsers: (params) => api.get('/auth/users/', { params }),
-  getUserDetail: (userId) => api.get(`/auth/users/${userId}/`),
-  approveSeller: (userId) => api.post(`/auth/users/${userId}/approve-seller/`),
+  // User Management
+  getAllUsers: (params) => api.get('/accounts/users/', { params }),
+  getUserDetail: (userId) => api.get(`/accounts/users/${userId}/`),
+  updateUser: (userId, data) => api.patch(`/accounts/users/${userId}/update/`, data),
+  deleteUser: (userId) => api.delete(`/accounts/users/${userId}/delete/`),
+  approveSeller: (userId) => api.post(`/accounts/users/${userId}/approve-seller/`),
   
-  // Category Management (already handled in shopAPI)
+  // Category Management
+  createCategory: (data) => api.post('/shop/categories/create/', data),
+  updateCategory: (id, data) => api.put(`/shop/categories/${id}/update/`, data),
+  deleteCategory: (id) => api.delete(`/shop/categories/${id}/delete/`),
+  
   // Orders Management
   getAllOrders: (params) => api.get('/orders/all/', { params }),
 };
