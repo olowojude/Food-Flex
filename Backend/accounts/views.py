@@ -22,38 +22,7 @@ from .models import User
 from .serializers import UserProfileSerializer
 
 
-# For user registration
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def register(request):
-    data = request.data.copy()
-    if 'email' in data:
-        data['email'] = data['email'].lower().strip()
-    if 'username' in data:
-        data['username'] = data['username'].lower().strip()
-    
-    serializer = UserRegistrationSerializer(data=data)
-    
-    if serializer.is_valid():
-        # Create user with BUYER role
-        user = serializer.save()
-        user.role = 'BUYER'  # Explicitly set to BUYER
-        user.save()
-        
-        # Generate tokens
-        refresh = RefreshToken.for_user(user)
-        
-        return Response({
-            'user': UserProfileSerializer(user).data,
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'message': 'Registration successful! You can now start shopping.'
-        }, status=status.HTTP_201_CREATED)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-#Login
+# Login - FIXED VERSION
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def login(request):
@@ -91,8 +60,14 @@ def login(request):
                     status=status.HTTP_401_UNAUTHORIZED
                 )
             
-            # Generate JWT tokens
+            # Generate JWT tokens with custom claims
             refresh = RefreshToken.for_user(authenticated_user)
+            
+            # ✅ ADD CUSTOM CLAIMS TO TOKEN
+            refresh['email'] = authenticated_user.email
+            refresh['role'] = authenticated_user.role  # ← THIS WAS MISSING!
+            refresh['first_name'] = authenticated_user.first_name
+            refresh['last_name'] = authenticated_user.last_name
             
             return Response({
                 'user': UserProfileSerializer(authenticated_user).data,
@@ -107,6 +82,43 @@ def login(request):
         {'error': 'Invalid email/username or password'},
         status=status.HTTP_401_UNAUTHORIZED
     )
+
+
+# Register - ALSO FIX THIS ONE
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def register(request):
+    data = request.data.copy()
+    if 'email' in data:
+        data['email'] = data['email'].lower().strip()
+    if 'username' in data:
+        data['username'] = data['username'].lower().strip()
+    
+    serializer = UserRegistrationSerializer(data=data)
+    
+    if serializer.is_valid():
+        # Create user with BUYER role
+        user = serializer.save()
+        user.role = 'BUYER'  # Explicitly set to BUYER
+        user.save()
+        
+        # Generate tokens with custom claims
+        refresh = RefreshToken.for_user(user)
+        
+        # ✅ ADD CUSTOM CLAIMS TO TOKEN
+        refresh['email'] = user.email
+        refresh['role'] = user.role  # ← ADD THIS!
+        refresh['first_name'] = user.first_name
+        refresh['last_name'] = user.last_name
+        
+        return Response({
+            'user': UserProfileSerializer(user).data,
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'message': 'Registration successful! You can now start shopping.'
+        }, status=status.HTTP_201_CREATED)
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 #User logout
@@ -426,3 +438,64 @@ def google_login(request):
         {'error': 'Google login not implemented yet'},
         status=status.HTTP_501_NOT_IMPLEMENTED
     )
+
+
+# Add this to accounts/views.py (at the end)
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def debug_user_status(request):
+    """
+    Debug endpoint to check user authentication and permissions.
+    TEMPORARY - Remove in production!
+    """
+    user = request.user
+    
+    debug_info = {
+        'authenticated': True,
+        'user_id': user.id,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'role': user.role,
+        'is_active': user.is_active,
+        'is_superuser': user.is_superuser,
+        'is_staff': user.is_staff,
+    }
+    
+    # Check seller profile
+    try:
+        seller_profile = user.seller_profile
+        debug_info['seller_profile'] = {
+            'exists': True,
+            'business_name': seller_profile.business_name,
+            'is_approved': seller_profile.is_approved,
+            'phone_number': seller_profile.phone_number,
+            'address': seller_profile.address,
+        }
+    except AttributeError:
+        debug_info['seller_profile'] = {
+            'exists': False,
+            'message': 'No seller profile found'
+        }
+    
+    # Check credit account
+    try:
+        credit_account = user.credit_account
+        debug_info['credit_account'] = {
+            'exists': True,
+            'balance': str(credit_account.current_balance),
+            'limit': str(credit_account.credit_limit),
+        }
+    except AttributeError:
+        debug_info['credit_account'] = {
+            'exists': False,
+            'message': 'No credit account found'
+        }
+    
+    return Response(debug_info, status=status.HTTP_200_OK)

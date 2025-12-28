@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Seller Inventory Page - MERGED VERSION
- * Your auto-refresh + stats + My ProductCard with view toggle
+ * Seller Inventory Page - Production Version
+ * Save as: frontend/src/app/inventory/page.js (REPLACE)
  */
 
 import { useState, useEffect } from 'react';
@@ -67,7 +67,13 @@ export default function InventoryPage() {
       console.log('Products loaded:', sorted.length);
     } catch (error) {
       console.error('Error fetching products:', error);
-      showToast('Failed to load products', 'error');
+      
+      // Show helpful error message
+      if (error.response?.status === 403) {
+        showToast('You need seller permissions to access inventory', 'error');
+      } else {
+        showToast('Failed to load products. Please try again.', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -89,14 +95,14 @@ export default function InventoryPage() {
     }
 
     switch (statusFilter) {
-      case 'active':
-        filtered = filtered.filter(p => p.is_active && p.stock_quantity > 0);
-        break;
-      case 'inactive':
-        filtered = filtered.filter(p => !p.is_active);
+      case 'in_stock':
+        filtered = filtered.filter(p => p.stock_quantity > 0);
         break;
       case 'out_of_stock':
         filtered = filtered.filter(p => p.stock_quantity === 0);
+        break;
+      case 'low_stock':
+        filtered = filtered.filter(p => p.stock_quantity > 0 && p.stock_quantity <= 5);
         break;
     }
 
@@ -147,18 +153,6 @@ export default function InventoryPage() {
     }
   };
 
-  const getStatusBadge = (isActive) => {
-    return isActive ? (
-      <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-        Active
-      </span>
-    ) : (
-      <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">
-        Inactive
-      </span>
-    );
-  };
-
   if (!isAuthenticated || !isSeller) return null;
 
   return (
@@ -177,7 +171,7 @@ export default function InventoryPage() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">My Inventory</h1>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">My Inventory</h1>
               <p className="text-gray-600">Manage your products</p>
             </div>
             <Link href="/inventory/new">
@@ -208,9 +202,9 @@ export default function InventoryPage() {
                   <CheckCircle className="w-6 h-6 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Active</p>
+                  <p className="text-sm text-gray-600">In Stock</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {products.filter(p => p.is_active && p.stock_quantity > 0).length}
+                    {products.filter(p => p.stock_quantity > 0).length}
                   </p>
                 </div>
               </div>
@@ -271,8 +265,8 @@ export default function InventoryPage() {
                   className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="all">All Products</option>
-                  <option value="active">Active & In Stock</option>
-                  <option value="inactive">Inactive</option>
+                  <option value="in_stock">In Stock</option>
+                  <option value="low_stock">Low Stock</option>
                   <option value="out_of_stock">Out of Stock</option>
                 </select>
               </div>
@@ -363,11 +357,6 @@ export default function InventoryPage() {
                         alt={product.name}
                         className="w-full h-full object-cover rounded-lg"
                       />
-                      {!product.is_active && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center rounded-lg">
-                          <span className="text-white font-semibold text-sm">INACTIVE</span>
-                        </div>
-                      )}
                     </div>
 
                     {/* Product Info */}
@@ -408,7 +397,6 @@ export default function InventoryPage() {
 
                       <div className="flex items-center gap-2">
                         {getStockBadge(product)}
-                        {getStatusBadge(product.is_active)}
                         {product.is_featured && (
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
                             Featured

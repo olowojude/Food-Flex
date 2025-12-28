@@ -313,9 +313,27 @@ def product_delete(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsSeller])
+@permission_classes([IsAuthenticated])  # Changed from IsSeller
 def my_products(request):
-    """Seller views their own products with pagination"""
+    """
+    Seller views their own products with pagination
+    
+    FIXED: Now checks if user is seller inside the view and returns
+    helpful error messages for debugging
+    """
+    
+    # Check if user is a seller
+    if request.user.role != 'SELLER':
+        return Response({
+            'error': 'You must be a seller to access inventory',
+            'details': {
+                'current_role': request.user.role,
+                'is_seller': request.user.role == 'SELLER',
+                'has_seller_profile': hasattr(request.user, 'seller_profile'),
+                'message': 'Please apply to become a seller first or contact admin if your application is pending.'
+            }
+        }, status=status.HTTP_403_FORBIDDEN)
+    
     # OPTIMIZATION: Only fetch needed fields
     products = Product.objects.filter(
         seller=request.user
@@ -324,9 +342,9 @@ def my_products(request):
     ).only(
         'id', 'name', 'slug', 'price', 'stock_quantity', 'main_image',
         'weight', 'unit', 'is_active', 'is_featured', 'views_count', 
-        'sales_count', 'created_at',
+        'sales_count', 'created_at', 'updated_at',
         'category__id', 'category__name'
-    ).order_by('-created_at')
+    ).order_by('-updated_at')  # Changed to show recently updated first
     
     # Apply pagination
     paginator = ProductPagination()

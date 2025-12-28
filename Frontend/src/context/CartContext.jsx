@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Fixed CartContext - Clear cart now updates navbar badge
+ * Fixed CartContext - Shows unique items count (like Jumia)
  * Save as: frontend/src/context/CartContext.jsx (REPLACE)
  */
 
@@ -83,18 +83,11 @@ export function CartProvider({ children }) {
     }
   };
 
-  // Clear entire cart - FIXED VERSION
+  // Clear entire cart
   const clearCart = async () => {
     try {
       await cartAPI.clearCart();
-      
-      // Option 1: Refetch cart from backend (recommended - ensures sync)
       await fetchCart();
-      
-      // Option 2: Update local state immediately (faster UI response)
-      // Uncomment this and comment out fetchCart() if you prefer instant update
-      // setCart(prev => ({ ...prev, items: [], total_items: 0, subtotal: '0.00' }));
-      
       return { success: true, message: 'Cart cleared' };
     } catch (error) {
       console.error('Error clearing cart:', error);
@@ -113,7 +106,8 @@ export function CartProvider({ children }) {
     updateCartItem,
     removeFromCart,
     clearCart,
-    itemCount: cart?.total_items || 0,
+    // ✅ FIXED: Show number of unique items (like Jumia), not total quantity
+    itemCount: cart?.items?.length || 0,  // Changed from cart?.total_items
     subtotal: cart?.subtotal || 0,
   };
 

@@ -100,7 +100,14 @@ class SellerProfile(models.Model):
         on_delete=models.CASCADE,
         related_name='seller_profile'
     )
-    business_name = models.CharField(max_length=255)
+    # NEW FIELD: Optional store name
+    store_name = models.CharField(
+        max_length=255, 
+        blank=True, 
+        null=True,
+        help_text="Store name (optional). Defaults to '{First Name}'s Store' if not provided"
+    )
+    business_name = models.CharField(max_length=255)  # Keep for backward compatibility
     business_description = models.TextField(blank=True, null=True)
     business_address = models.TextField(blank=True, null=True)
     wallet_balance = models.DecimalField(
@@ -123,7 +130,13 @@ class SellerProfile(models.Model):
         verbose_name_plural = 'Seller Profiles'
     
     def __str__(self):
-        return f"{self.business_name} - {self.user.email}"
+        return f"{self.get_store_name()} - {self.user.email}"
+    
+    def get_store_name(self):
+        """Return store_name if set, otherwise return '{first_name}'s Store'"""
+        if self.store_name:
+            return self.store_name
+        return f"{self.user.first_name}'s Store" if self.user.first_name else f"{self.user.email.split('@')[0]}'s Store"
     
     def add_earnings(self, amount):
         self.wallet_balance += amount

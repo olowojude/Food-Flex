@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Profile Page with Working Image Upload (Phone Number Read-Only)
- * Path: frontend/src/app/profile/page.js (REPLACE)
+ * Profile Page with Loan Repayment Feature
+ * Save as: frontend/src/app/profile/page.js (REPLACE)
  */
 
 import { useState, useEffect, useRef } from 'react';
@@ -15,10 +15,11 @@ import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Toast from '@/components/common/Toast';
+import RepaymentModal from '@/components/common/RepaymentModal';
 import { 
   User, Mail, Phone, MapPin, CreditCard, DollarSign, 
   TrendingDown, Calendar, Camera, Lock, CheckCircle,
-  Package, ShoppingBag, Eye, Upload
+  Package, ShoppingBag, Eye, Upload, Wallet, Gift
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -34,6 +35,7 @@ export default function ProfilePage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState('personal');
+  const [showRepaymentModal, setShowRepaymentModal] = useState(false);
   
   const [formData, setFormData] = useState({
     first_name: '',
@@ -85,7 +87,6 @@ export default function ProfilePage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Handle profile image upload
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
@@ -94,13 +95,11 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       showToast('Please select a valid image file', 'error');
       return;
     }
 
-    // Validate file size (5MB max)
     if (file.size > 5 * 1024 * 1024) {
       showToast('Image size must be less than 5MB', 'error');
       return;
@@ -110,13 +109,9 @@ export default function ProfilePage() {
       setUploadingImage(true);
       showToast('Uploading image...', 'warning');
 
-      // Upload to Cloudinary
       const imageUrl = await uploadImage(file, 'profiles');
-      
-      // Update form data
       setFormData(prev => ({ ...prev, profile_image: imageUrl }));
       
-      // Auto-save profile image
       const result = await updateUser({ profile_image: imageUrl });
       
       if (result.success) {
@@ -146,6 +141,31 @@ export default function ProfilePage() {
     }
   };
 
+  const handleRepayment = async (amount) => {
+    try {
+      // This needs to be implemented in your API
+      // For now, we'll show a placeholder
+      const response = await creditAPI.processRepayment(user.id, { 
+        amount: amount 
+      });
+
+      showToast(`Successfully repaid ₦${amount.toLocaleString()}!`, 'success');
+      
+      // Check if bonus was applied
+      if (response.data.bonus_applied) {
+        showToast(`🎉 Bonus! Your credit limit increased by ₦${response.data.bonus_amount.toLocaleString()}!`, 'success');
+      }
+
+      setShowRepaymentModal(false);
+      
+      // Refresh credit data
+      await fetchData();
+    } catch (error) {
+      console.error('Repayment error:', error);
+      throw new Error(error.response?.data?.error || 'Repayment failed. Please try again.');
+    }
+  };
+
   if (!isAuthenticated) return null;
   
   if (loading) {
@@ -163,6 +183,15 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Repayment Modal */}
+      {showRepaymentModal && (
+        <RepaymentModal
+          creditAccount={creditAccount}
+          onRepaymentSuccess={handleRepayment}
+          onClose={() => setShowRepaymentModal(false)}
+        />
+      )}
+
       {/* Toast Notifications */}
       {toast && (
         <Toast
@@ -183,7 +212,7 @@ export default function ProfilePage() {
           {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 sticky top-4">
-              {/* Profile Picture with Upload */}
+              {/* Profile Picture */}
               <div className="text-center mb-6">
                 <div className="relative inline-block">
                   <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-3 overflow-hidden">
@@ -198,12 +227,11 @@ export default function ProfilePage() {
                     )}
                   </div>
                   
-                  {/* Upload Button */}
                   <button
                     type="button"
                     onClick={handleImageClick}
                     disabled={uploadingImage}
-                    className="absolute bottom-2 right-0 bg-white p-2 rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute bottom-2 right-0 bg-white p-2 rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
                   >
                     {uploadingImage ? (
                       <LoadingSpinner size="sm" />
@@ -212,7 +240,6 @@ export default function ProfilePage() {
                     )}
                   </button>
                   
-                  {/* Hidden File Input */}
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -373,6 +400,39 @@ export default function ProfilePage() {
             {/* Credit Info Tab */}
             {activeTab === 'credit' && isBuyer && (
               <div className="space-y-6">
+                {/* Repay Loan Button (Prominent) */}
+                {outstandingBalance > 0 && (
+                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Wallet className="w-6 h-6" />
+                          <h3 className="text-xl font-bold">Outstanding Balance</h3>
+                        </div>
+                        <p className="text-3xl font-bold mb-1">
+                          ₦{outstandingBalance.toLocaleString()}
+                        </p>
+                        <p className="text-green-100 text-sm mb-4">
+                          {usagePercentage < 50 ? '🎉 Repay now to get a 5% credit limit bonus!' : 'Reduce your balance to unlock bonuses'}
+                        </p>
+                        <Button
+                          onClick={() => setShowRepaymentModal(true)}
+                          variant="secondary"
+                          className="bg-white text-green-600 hover:bg-green-50 border-0 font-bold"
+                        >
+                          <Wallet className="w-5 h-5 mr-2" />
+                          Repay Loan
+                        </Button>
+                      </div>
+                      {usagePercentage < 50 && (
+                        <div className="hidden md:block">
+                          <Gift className="w-20 h-20 text-white opacity-20" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* Credit Overview */}
                 <div className="grid md:grid-cols-3 gap-6">
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">

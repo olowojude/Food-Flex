@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Compact Product Detail Page (Jumia/Temu style)
+ * Simplified Product Detail - Uses seller_info from backend
  * Save as: frontend/src/app/products/[slug]/page.js (REPLACE)
  */
 
@@ -41,6 +41,7 @@ export default function ProductDetailPage() {
     try {
       setLoading(true);
       const response = await shopAPI.getProduct(params.slug);
+      console.log('Product data:', response.data); // Debug
       setProduct(response.data);
       setSelectedImage(response.data.main_image);
     } catch (error) {
@@ -111,11 +112,14 @@ export default function ProductDetailPage() {
   const averageRating = product.average_rating || 0;
   const reviewCount = product.reviews?.length || 0;
   const salesCount = product.sales_count || 0;
+  
+  // Get seller info from backend
+  const storeName = product.seller_info?.store_name || 'Store';
+  const storeAddress = product.seller_info?.business_address || 'Jos, Plateau State';
 
   return (
     <div className="min-h-screen bg-gray-50 py-4">
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* Compact Back Button */}
         <Link 
           href="/products"
           className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900 mb-3"
@@ -124,7 +128,6 @@ export default function ProductDetailPage() {
           Back
         </Link>
 
-        {/* Compact Message */}
         {message.text && (
           <div className={`mb-3 p-3 rounded text-sm ${
             message.type === 'success' 
@@ -136,9 +139,9 @@ export default function ProductDetailPage() {
         )}
 
         <div className="grid lg:grid-cols-2 gap-6">
-          {/* Product Images - Taller */}
+          {/* Product Images */}
           <div>
-            <div className="bg-white rounded-lg p-3 mb-3 border border-gray-200 w-120 mx-auto">
+            <div className="bg-white rounded-lg p-3 mb-3 border border-gray-200 max-w-md mx-auto">
               <img
                 src={selectedImage || 'https://via.placeholder.com/600x800'}
                 alt={product.name}
@@ -147,9 +150,8 @@ export default function ProductDetailPage() {
               />
             </div>
             
-            {/* Compact Thumbnails */}
             {allImages.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto">
+              <div className="flex gap-2 overflow-x-auto justify-center">
                 {allImages.map((img, idx) => (
                   <button
                     key={idx}
@@ -169,15 +171,13 @@ export default function ProductDetailPage() {
             )}
           </div>
 
-          {/* Product Info - Compact */}
+          {/* Product Info */}
           <div className="space-y-4">
-            {/* Title & Rating - Compact */}
             <div className="bg-white rounded-lg p-4 border border-gray-200">
               <h1 className="text-2xl font-bold text-gray-900 mb-2">
                 {product.name}
               </h1>
 
-              {/* Compact Rating */}
               {averageRating > 0 && (
                 <div className="flex items-center gap-2 text-sm">
                   <div className="flex items-center">
@@ -198,7 +198,6 @@ export default function ProductDetailPage() {
                 </div>
               )}
 
-              {/* Price - Compact */}
               <div className="mt-3">
                 <p className="text-3xl font-bold text-blue-600">
                   ₦{parseFloat(product.price).toLocaleString()}
@@ -210,7 +209,6 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
-              {/* Stock - Compact */}
               <div className="mt-3">
                 {product.is_in_stock ? (
                   <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 rounded text-xs font-medium">
@@ -224,53 +222,30 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Seller Info - Compact */}
+            {/* Seller Info */}
             <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shrink-0">
                   <Store className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className="font-semibold text-gray-900 text-sm truncate">
-                    {product.seller?.business_name || `${product.seller_name}'s Store`}
+                    {storeName}
                   </h3>
                   <p className="text-xs text-gray-500">Verified Seller</p>
                 </div>
               </div>
 
-              {/* Compact Stats */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="bg-gray-50 rounded p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                    <span className="text-xs text-gray-600">Rating</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">
-                    {averageRating > 0 ? averageRating.toFixed(1) : 'New'}
-                  </p>
+              <div className="mt-3 p-2 bg-gray-50 rounded text-center">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <ShoppingBag className="w-3 h-3 text-green-600" />
+                  <span className="text-xs text-gray-600">Sold</span>
                 </div>
-
-                <div className="bg-gray-50 rounded p-2 text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <ShoppingBag className="w-3 h-3 text-green-600" />
-                    <span className="text-xs text-gray-600">Sold</span>
-                  </div>
-                  <p className="text-lg font-bold text-gray-900">{salesCount}</p>
-                </div>
-              </div>
-
-              {/* Location - Compact */}
-              <div className="flex items-start gap-2 mt-3 p-2 bg-gray-50 rounded">
-                <MapPin className="w-3 h-3 text-red-600 mt-0.5 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-gray-900 truncate">
-                    {product.seller?.business_address || 'Jos, Plateau State'}
-                  </p>
-                </div>
+                <p className="text-lg font-bold text-gray-900">{salesCount}</p>
               </div>
             </div>
 
-            {/* Quantity & Add to Cart - Compact */}
+            {/* Add to Cart */}
             {product.is_in_stock && (
               <div className="bg-white rounded-lg p-4 border border-gray-200 space-y-3">
                 <div>
@@ -330,7 +305,6 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Description - Compact */}
             <div className="bg-white rounded-lg p-4 border border-gray-200">
               <h3 className="font-semibold text-gray-900 mb-2 text-sm">Description</h3>
               <p className="text-sm text-gray-600 leading-relaxed">{product.description}</p>
@@ -338,7 +312,7 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        {/* Reviews Section - Compact */}
+        {/* Reviews */}
         {product.reviews && product.reviews.length > 0 && (
           <div className="mt-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Customer Reviews</h2>

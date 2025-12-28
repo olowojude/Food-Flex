@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Fixed Seller Sales/Orders Page - Shows ALL Orders Including PENDING
+ * Seller Sales Page with QR Scanner Integration
  * Save as: frontend/src/app/sales/page.js (REPLACE)
  */
 
@@ -12,9 +12,10 @@ import { useAuth } from '@/context/AuthContext';
 import { orderAPI } from '@/lib/api';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Button from '@/components/common/Button';
+import QRScanner from '@/components/common/QRScanner';
 import { 
   Package, DollarSign, ShoppingBag, TrendingUp, 
-  CheckCircle, Clock, XCircle, Search, Eye, Check, AlertCircle
+  CheckCircle, Clock, XCircle, Search, Eye, Check, AlertCircle, Camera
 } from 'lucide-react';
 
 export default function SalesPage() {
@@ -23,8 +24,10 @@ export default function SalesPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all'); // all, pending, confirmed, completed, cancelled
+  const [filter, setFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showScanner, setShowScanner] = useState(false);
+  const [scanningOrderId, setScanningOrderId] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -49,26 +52,13 @@ export default function SalesPage() {
       setLoading(true);
       setError(null);
       
-      console.log('Fetching seller orders...');
       const response = await orderAPI.getMyOrders();
-      
-      console.log('Orders response:', response);
-      
-      // Handle both paginated and non-paginated responses
       const orderList = response.data.results || response.data;
-      
-      console.log('Extracted order list:', orderList);
-      console.log('Total orders:', orderList.length);
-      
-      // Log pending orders specifically
-      const pendingOrders = orderList.filter(o => o.status === 'PENDING');
-      console.log('Pending orders:', pendingOrders.length, pendingOrders);
       
       setOrders(orderList);
       calculateStats(orderList);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      console.error('Error response:', error.response?.data);
       setError(error.response?.data?.error || 'Failed to load orders');
     } finally {
       setLoading(false);
@@ -87,20 +77,30 @@ export default function SalesPage() {
         .reduce((sum, o) => sum + parseFloat(o.total_amount), 0),
     };
     
-    console.log('Calculated stats:', stats);
     setStats(stats);
   };
 
-  const handleConfirmOrder = async (orderId) => {
-    if (!confirm('Confirm this order? The buyer will be notified.')) return;
+  const handleScanClick = (orderId) => {
+    setScanningOrderId(orderId);
+    setShowScanner(true);
+  };
 
+  const handleScanSuccess = async ({ orderNumber, qrToken }) => {
+    console.log('QR Scanned:', { orderNumber, qrToken });
+    
+    setShowScanner(false);
+
+    // Verify the QR code with backend first
     try {
-      await orderAPI.confirmOrder(orderId);
-      alert('Order confirmed successfully!');
-      fetchOrders();
+      const response = await orderAPI.verifyQRCode({ qr_code_token: qrToken });
+      
+      if (response.data.order) {
+        // Navigate to order detail page with scan flag
+        router.push(`/orders/${response.data.order.id}?scan=true&token=${qrToken}`);
+      }
     } catch (error) {
-      console.error('Error confirming order:', error);
-      alert(error.response?.data?.error || 'Failed to confirm order');
+      console.error('QR verification error:', error);
+      alert(error.response?.data?.error || 'Invalid QR code. Please try again.');
     }
   };
 
@@ -176,6 +176,14 @@ export default function SalesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* QR Scanner Modal */}
+      {showScanner && (
+        <QRScanner
+          onScanSuccess={handleScanSuccess}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
+
       <div className="container mx-auto px-4">
         {/* Header */}
         <div className="mb-8">
@@ -184,7 +192,7 @@ export default function SalesPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-gray-600">Total Orders</p>
@@ -218,14 +226,6 @@ export default function SalesPage() {
             <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
           </div>
 
-          <div className="card p-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm text-gray-600">Cancelled</p>
-              <XCircle className="w-5 h-5 text-red-600" />
-            </div>
-            <p className="text-2xl font-bold text-red-600">{stats.cancelled}</p>
-          </div>
-
           <div className="card p-4 bg-green-50">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-gray-600">Revenue</p>
@@ -247,7 +247,7 @@ export default function SalesPage() {
                   You have {stats.pending} pending order{stats.pending > 1 ? 's' : ''}!
                 </h3>
                 <p className="text-sm text-yellow-700">
-                  These orders need to be prepared and reserved for pickup. Click "View Pending" to see them.
+                  Stock has been reserved. Scan the buyer's QR code to confirm pickup.
                 </p>
               </div>
             </div>
@@ -341,7 +341,7 @@ export default function SalesPage() {
                       <div>
                         <p className="text-gray-600">Date</p>
                         <p className="font-medium text-gray-900">
-                          {new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}
+                          {new Date(order.created_at).toLocaleDateString()}
                         </p>
                       </div>
                       <div>
@@ -355,7 +355,7 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                          ⚠️ Stock has been reserved. Please prepare this order for pickup.
+                          ⚠️ Stock reserved. Scan buyer's QR code to confirm.
                         </p>
                       </div>
                     )}
@@ -373,11 +373,11 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <Button
                         variant="primary"
-                        onClick={() => handleConfirmOrder(order.id)}
+                        onClick={() => handleScanClick(order.id)}
                         className="w-full"
                       >
-                        <Check className="w-4 h-4 mr-2" />
-                        Confirm Order
+                        <Camera className="w-4 h-4 mr-2" />
+                        Scan QR Code
                       </Button>
                     )}
 

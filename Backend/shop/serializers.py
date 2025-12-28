@@ -1,6 +1,8 @@
+# Backend/shop/serializers.py
+# REPLACE THE ENTIRE FILE
+
 from rest_framework import serializers
 from .models import Category, Product, ProductReview
-from accounts.serializers import UserProfileSerializer
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -20,23 +22,91 @@ class CategorySerializer(serializers.ModelSerializer):
         return value
 
 
+class SellerInfoSerializer(serializers.Serializer):
+    """Serializer for seller information in products"""
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    phone = serializers.CharField(source='phone_number', read_only=True)
+    store_name = serializers.SerializerMethodField()
+    business_name = serializers.SerializerMethodField()
+    business_address = serializers.SerializerMethodField()
+    
+    def get_store_name(self, obj):
+        """
+        Get store name from seller profile or generate from first name.
+        obj here is the User (seller) object.
+        """
+        # Try to get from seller profile first
+        if hasattr(obj, 'seller_profile') and obj.seller_profile:
+            profile = obj.seller_profile
+            # Use the get_store_name method if it exists
+            if hasattr(profile, 'get_store_name'):
+                return profile.get_store_name()
+            # Otherwise use business_name
+            if profile.business_name:
+                return profile.business_name
+        
+        # Fallback to generating from user's first name
+        if obj.first_name:
+            return f"{obj.first_name}'s Store"
+        
+        # Last resort: use email
+        return f"{obj.email.split('@')[0]}'s Store"
+    
+    def get_business_name(self, obj):
+        """Get business name from seller profile"""
+        if hasattr(obj, 'seller_profile') and obj.seller_profile:
+            return obj.seller_profile.business_name
+        return self.get_store_name(obj)
+    
+    def get_business_address(self, obj):
+        """Get business address from seller profile or user address"""
+        if hasattr(obj, 'seller_profile') and obj.seller_profile:
+            if obj.seller_profile.business_address:
+                return obj.seller_profile.business_address
+        
+        # Fallback to user address
+        if obj.address:
+            return obj.address
+        
+        return "Location not specified"
+
+
 class ProductListSerializer(serializers.ModelSerializer):
     """Serializer for product list view"""
     category_name = serializers.CharField(source='category.name', read_only=True)
-    seller_name = serializers.CharField(source='seller.get_full_name', read_only=True)
-    seller_email = serializers.CharField(source='seller.email', read_only=True)
+    seller_name = serializers.SerializerMethodField()
+    seller_store_name = serializers.SerializerMethodField()
     average_rating = serializers.ReadOnlyField()
     
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'category', 'category_name',
-            'seller', 'seller_name', 'seller_email', 'price', 'formatted_price',
+            'seller', 'seller_name', 'seller_store_name', 'price', 'formatted_price',
             'stock_quantity', 'is_in_stock', 'main_image',
             'weight', 'unit', 'is_featured', 'views_count',
             'sales_count', 'average_rating', 'created_at'
         ]
         read_only_fields = ['slug', 'seller', 'views_count', 'sales_count']
+    
+    def get_seller_name(self, obj):
+        """Get seller's full name"""
+        return obj.seller.get_full_name()
+    
+    def get_seller_store_name(self, obj):
+        """Get seller's store name"""
+        if hasattr(obj.seller, 'seller_profile') and obj.seller.seller_profile:
+            profile = obj.seller.seller_profile
+            if hasattr(profile, 'get_store_name'):
+                return profile.get_store_name()
+            if profile.business_name:
+                return profile.business_name
+        
+        if obj.seller.first_name:
+            return f"{obj.seller.first_name}'s Store"
+        
+        return f"{obj.seller.email.split('@')[0]}'s Store"
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
@@ -61,7 +131,7 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 class ProductDetailSerializer(serializers.ModelSerializer):
     """Detailed serializer for single product view"""
     category = CategorySerializer(read_only=True)
-    seller = UserProfileSerializer(read_only=True)
+    seller_info = serializers.SerializerMethodField()
     reviews = ProductReviewSerializer(many=True, read_only=True)
     average_rating = serializers.ReadOnlyField()
     
@@ -69,13 +139,17 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'name', 'slug', 'description', 'category',
-            'seller', 'price', 'formatted_price', 'stock_quantity',
+            'seller', 'seller_info', 'price', 'formatted_price', 'stock_quantity',
             'is_in_stock', 'main_image', 'additional_images',
             'weight', 'unit', 'is_active', 'is_featured',
             'views_count', 'sales_count', 'reviews', 'average_rating',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['slug', 'seller', 'views_count', 'sales_count', 'created_at', 'updated_at']
+    
+    def get_seller_info(self, obj):
+        """Get seller information using SellerInfoSerializer"""
+        return SellerInfoSerializer(obj.seller).data
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):

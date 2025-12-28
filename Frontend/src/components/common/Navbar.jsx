@@ -1,7 +1,7 @@
 'use client';
 
 // frontend/src/components/common/Navbar.jsx
- 
+// Save as: frontend/src/components/common/Navbar.jsx (REPLACE)
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -21,13 +21,13 @@ export default function Navbar() {
   return (
     <nav className="bg-white shadow-md sticky top-0 z-50">
       <div className="container mx-auto px-4">
-        <div className="flex items-center gap-4 h-16">
-          {/* Logo */}
+        <div className="flex items-center justify-between gap-4 h-16">
+          {/* Logo - Always on the left */}
           <Link href="/" className="text-2xl font-bold text-blue-600 shrink-0">
             FoodFlex
           </Link>
 
-          {/* Search Bar - Desktop */}
+          {/* Search Bar - Desktop Only */}
           <div className="hidden md:block flex-1 max-w-xl">
             <SearchBar />
           </div>
@@ -135,15 +135,16 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile Menu Button */}
+          {/* Mobile Menu Button - Now on the RIGHT */}
           <button
-            className="md:hidden p-2"
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle menu"
           >
             {mobileMenuOpen ? (
-              <X className="w-6 h-6" />
+              <X className="w-6 h-6 text-gray-700" />
             ) : (
-              <Menu className="w-6 h-6" />
+              <Menu className="w-6 h-6 text-gray-700" />
             )}
           </button>
         </div>
@@ -159,7 +160,7 @@ export default function Navbar() {
             <div className="flex flex-col gap-2">
               <Link 
                 href="/" 
-                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <Home className="w-5 h-5" />
@@ -168,7 +169,7 @@ export default function Navbar() {
               
               <Link 
                 href="/products" 
-                className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 <ShoppingBag className="w-5 h-5" />
@@ -180,11 +181,18 @@ export default function Navbar() {
                   {isBuyer && (
                     <Link 
                       href="/cart" 
-                      className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                       onClick={() => setMobileMenuOpen(false)}
                     >
-                      <ShoppingCart className="w-5 h-5" />
-                      <span>Cart ({itemCount})</span>
+                      <div className="flex items-center gap-3">
+                        <ShoppingCart className="w-5 h-5" />
+                        <span>Cart</span>
+                      </div>
+                      {itemCount > 0 && (
+                        <span className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+                          {itemCount}
+                        </span>
+                      )}
                     </Link>
                   )}
                   
@@ -192,7 +200,7 @@ export default function Navbar() {
                     <>
                       <Link 
                         href="/inventory" 
-                        className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                        className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         <Package className="w-5 h-5" />
@@ -200,7 +208,7 @@ export default function Navbar() {
                       </Link>
                       <Link 
                         href="/sales" 
-                        className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                        className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                         onClick={() => setMobileMenuOpen(false)}
                       >
                         <Store className="w-5 h-5" />
@@ -212,7 +220,7 @@ export default function Navbar() {
                   {isAdmin && (
                     <Link 
                       href="/manage" 
-                      className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                      className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       <Settings className="w-5 h-5" />
@@ -222,7 +230,7 @@ export default function Navbar() {
                   
                   <Link 
                     href="/profile" 
-                    className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                    className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <User className="w-5 h-5" />
@@ -234,7 +242,7 @@ export default function Navbar() {
                       logout();
                       setMobileMenuOpen(false);
                     }}
-                    className="flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg"
+                    className="flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition"
                   >
                     <LogOut className="w-5 h-5" />
                     <span>Logout</span>
@@ -244,14 +252,14 @@ export default function Navbar() {
                 <>
                   <Link 
                     href="/login" 
-                    className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 rounded-lg"
+                    className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Login
                   </Link>
                   <Link 
                     href="/register" 
-                    className="flex items-center gap-3 px-4 py-2 bg-blue-600 text-white rounded-lg mx-4 justify-center"
+                    className="px-4 py-3 bg-blue-600 text-white rounded-lg mx-4 text-center font-medium hover:bg-blue-700 transition"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Sign Up
