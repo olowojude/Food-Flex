@@ -2,22 +2,31 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import environ
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Initialize environment variables
 env = environ.Env(
-    DEBUG=(bool, True)
+    DEBUG=(bool, False)  # Default to False for production safety
 )
 
-# Read .env file
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+# Read .env file (for local development)
+env_file = os.path.join(BASE_DIR, '.env')
+if os.path.exists(env_file):
+    environ.Env.read_env(env_file)
 
-
+# Security Settings
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
-ALLOWED_HOSTS = env('ALLOWED_HOSTS').split(',')
 
+# ALLOWED_HOSTS - Handle both comma-separated string and direct list
+ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+
+# Add Render.com hostname if present
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
 # Application definition
 INSTALLED_APPS = [
@@ -43,14 +52,15 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # CORS before CommonMiddleware
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise for static files
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'accounts.middleware.AdminRoleMiddleware',  # Custom middleware to enforce ADMIN role
+    'accounts.middleware.AdminRoleMiddleware',
 ]
 
 ROOT_URLCONF = 'foodflex.urls'
@@ -73,25 +83,26 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'foodflex.wsgi.application'
 
-# # Database
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': os.environ.get('DB_NAME', 'foodflex_db'),
-#         'USER': os.environ.get('DB_USER', 'postgres'),
-#         'PASSWORD': os.environ.get('DB_PASSWORD', 'password'),
-#         'HOST': os.environ.get('DB_HOST', 'localhost'),
-#         'PORT': os.environ.get('DB_PORT', '5432'),
-#     }
-# }
-
-# For development, you can use SQLite
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+# Database Configuration
+# Automatically uses PostgreSQL on Render, SQLite locally
+if os.environ.get('DATABASE_URL'):
+    # Production: PostgreSQL on Render
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=os.environ.get('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+            ssl_require=True,
+        )
     }
-}
+else:
+    # Development: SQLite
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -116,10 +127,14 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-MEDIA_URL = 'media/'
+# WhiteNoise configuration for efficient static file serving
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files
+MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
@@ -137,7 +152,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'PAGE_SIZE': 30,  # Updated to 30 as per documentation
     'DEFAULT_FILTER_BACKENDS': [
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
@@ -149,22 +164,27 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    'BLACKLIST_AFTER_ROTATION': False,  # Changed to False as per doc
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+    'AUTH_COOKIE': 'access_token',
+    'AUTH_COOKIE_REFRESH': 'refresh_token',
+    'AUTH_COOKIE_SECURE': not DEBUG,  # True in production
+    'AUTH_COOKIE_HTTP_ONLY': True,
+    'AUTH_COOKIE_SAMESITE': 'Lax',
 }
 
-# GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '')
-GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID')
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID', default='')
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+CORS_ALLOWED_ORIGINS = env(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:3000,http://127.0.0.1:3000'
+).split(',')
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -181,25 +201,50 @@ CORS_ALLOW_METHODS = [
 DEFAULT_CREDIT_LIMIT = 50000  # ₦50,000 initial credit
 CURRENCY_SYMBOL = '₦'
 
-# Security Settings (Production)
+# # Cloudinary Configuration (Optional - for image hosting)
+# CLOUDINARY_CLOUD_NAME = env('CLOUDINARY_CLOUD_NAME', default='')
+# CLOUDINARY_API_KEY = env('CLOUDINARY_API_KEY', default='')
+# CLOUDINARY_API_SECRET = env('CLOUDINARY_API_SECRET', default='')
+
+# if CLOUDINARY_CLOUD_NAME:
+#     try:
+#         import cloudinary
+#         cloudinary.config(
+#             cloud_name=CLOUDINARY_CLOUD_NAME,
+#             api_key=CLOUDINARY_API_KEY,
+#             api_secret=CLOUDINARY_API_SECRET,
+#             secure=True
+#         )
+#     except ImportError:
+#         pass  # Cloudinary not installed
+
+# Security Settings for Production
 if not DEBUG:
+    # HTTPS/SSL Settings
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    
+    # Security Headers
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = 31536000
+    
+    # HSTS Settings
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    
+    # Proxy Settings (for Render)
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Add Jazzmin Configuration (Customize to your liking)
+# Jazzmin Configuration
 JAZZMIN_SETTINGS = {
     # Site branding
     "site_title": "FoodFlex Admin",
     "site_header": "FoodFlex",
     "site_brand": "FoodFlex Management",
-    "site_logo": None,  # Add your logo URL here if you have one
+    "site_logo": None,
     "welcome_sign": "Welcome to FoodFlex Admin Panel",
     "copyright": "FoodFlex 2024",
     
@@ -209,7 +254,7 @@ JAZZMIN_SETTINGS = {
     # Top menu links
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
-        {"name": "View Site", "url": "http://localhost:3000", "new_window": True},
+        {"name": "View Site", "url": "/", "new_window": True},
     ],
     
     # User menu links
@@ -217,7 +262,7 @@ JAZZMIN_SETTINGS = {
         {"model": "accounts.user"},
     ],
     
-    # Side menu ordering (customize the order and grouping)
+    # Side menu ordering
     "order_with_respect_to": [
         "accounts", 
         "shop", 
@@ -225,7 +270,7 @@ JAZZMIN_SETTINGS = {
         "credits"
     ],
     
-    # Custom icons (using Font Awesome)
+    # Custom icons (Font Awesome)
     "icons": {
         "accounts.user": "fas fa-users",
         "accounts.sellerprofile": "fas fa-store",
@@ -238,7 +283,7 @@ JAZZMIN_SETTINGS = {
         "credits.repaymenthistory": "fas fa-money-bill-wave",
     },
     
-    # Hide these apps/models if needed
+    # Hide apps/models
     "hide_apps": [],
     "hide_models": [],
     
@@ -248,10 +293,10 @@ JAZZMIN_SETTINGS = {
     # UI tweaks
     "show_sidebar": True,
     "navigation_expanded": True,
-    "changeform_format": "horizontal_tabs",  # or "vertical_tabs", "collapsible", "carousel"
+    "changeform_format": "horizontal_tabs",
 }
 
-# Optional: Customize UI colors
+# Jazzmin UI Tweaks
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
@@ -268,5 +313,27 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar_nav_compact_style": False,
     "sidebar_nav_legacy_style": False,
     "sidebar_nav_flat_style": False,
-    "theme": "default",  # "cerulean", "cosmo", "cyborg", "darkly", "flatly", etc.
+    "theme": "default",
+}
+
+# Logging Configuration (helpful for debugging production issues)
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
 }
