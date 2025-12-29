@@ -3,19 +3,23 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.views.generic import RedirectView
+from django.http import JsonResponse
+
+
+def health_check(request):
+    return JsonResponse({"status": "ok"})
 
 urlpatterns = [
-    # Commented out admin route because the admin page will be manage via frontend
     path('admin/', admin.site.urls),
-    # path('admin/', RedirectView.as_view(url='http://localhost:3000/manage', permanent=False)),
 
     # API endpoints
-    # path('api/auth/', include('accounts.urls')),
     path('api/accounts/', include('accounts.urls')),
     path('api/shop/', include('shop.urls')),
     path('api/credits/', include('credits.urls')),
     path('api/orders/', include('orders.urls')),
+    path("health", health_check),
 ]
+
 
 # Serve media files in development
 if settings.DEBUG:
