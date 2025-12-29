@@ -1,18 +1,19 @@
 'use client';
 
 /**
- * Products Page with Optimized Images
- * Better product card sizes matching Jumia/Temu
+ * Products Page - Complete Single File Version
+ * Save as: frontend/src/app/products/page.js (REPLACE ENTIRE FILE)
  */
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { shopAPI } from '@/lib/api';
 import ProductCard from '@/components/common/ProductCard';
+import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-export default function ProductsPage() {
+// Internal component that uses useSearchParams
+function ProductsContent() {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -254,14 +255,12 @@ export default function ProductsPage() {
               </div>
             ) : products.length > 0 ? (
               <>
-                {/* Products Grid - 4 columns */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                   {products.map((product) => (
                     <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
 
-                {/* Pagination */}
                 {pagination.totalPages > 1 && (
                   <div className="mt-8 flex items-center justify-center gap-2">
                     <button
@@ -334,5 +333,18 @@ export default function ProductsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Main export with Suspense wrapper
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    }>
+      <ProductsContent />
+    </Suspense>
   );
 }
