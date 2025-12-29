@@ -1,31 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { CheckCircle, Download, Home } from 'lucide-react';
 import Button from '@/components/common/Button';
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [order, setOrder] = useState(null);
   const [qrCode, setQrCode] = useState('');
 
   useEffect(() => {
-    // Get order data from sessionStorage
     const orderData = sessionStorage.getItem('checkout_order');
     const qrCodeData = sessionStorage.getItem('checkout_qr');
 
     if (orderData && qrCodeData) {
       setOrder(JSON.parse(orderData));
       setQrCode(qrCodeData);
-      
-      // Clear sessionStorage after loading
-      // sessionStorage.removeItem('checkout_order');
-      // sessionStorage.removeItem('checkout_qr');
     } else {
-      // If no data, redirect to orders page
       router.push('/orders');
     }
   }, []);
@@ -33,7 +27,6 @@ export default function CheckoutSuccessPage() {
   const handleDownloadQR = () => {
     if (!qrCode) return;
 
-    // Create download link
     const link = document.createElement('a');
     link.href = qrCode;
     link.download = `foodflex-order-${order?.order_number}.png`;
@@ -181,5 +174,17 @@ export default function CheckoutSuccessPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-600">Loading...</p>
+      </div>
+    }>
+      <CheckoutSuccessContent />
+    </Suspense>
   );
 }

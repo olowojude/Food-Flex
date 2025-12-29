@@ -1,11 +1,6 @@
 'use client';
 
-/**
- * Fixed Order Detail Page - Shows Complete Buyer/Seller Information
- * Save as: frontend/src/app/orders/[id]/page.js (REPLACE)
- */
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -18,7 +13,7 @@ import {
   AlertCircle, Check
 } from 'lucide-react';
 
-export default function OrderDetailPage() {
+function OrderDetailContent() {
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -46,7 +41,7 @@ export default function OrderDetailPage() {
     try {
       setLoading(true);
       const response = await orderAPI.getOrderDetail(orderId);
-      console.log('Order data:', response.data); // Debug log
+      console.log('Order data:', response.data);
       setOrder(response.data);
     } catch (error) {
       console.error('Error fetching order:', error);
@@ -516,5 +511,17 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OrderDetailPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    }>
+      <OrderDetailContent />
+    </Suspense>
   );
 }
