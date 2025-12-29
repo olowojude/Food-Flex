@@ -181,11 +181,17 @@ SIMPLE_JWT = {
 GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID', default='')
 
 # CORS Settings
+cors_origins_str = env('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000')
+
+# Split by comma and strip whitespace
 CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
+    origin.strip() 
+    for origin in cors_origins_str.split(',') 
     if origin.strip()
 ]
+
+# For development: Allow all origins (ONLY if DEBUG is True)
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Uncomment this line for easier local development
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -197,6 +203,36 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+# CSRF Trusted Origins (for POST requests)
+csrf_origins_str = env('CSRF_TRUSTED_ORIGINS', default='https://food-flexx.vercel.app')
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip() 
+    for origin in csrf_origins_str.split(',') 
+    if origin.strip()
+]
+
+# Cookie settings for cross-origin requests
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SECURE = True  # Required when SameSite=None
+CSRF_COOKIE_SECURE = True     # Required when SameSite=None
+
+# Additional CORS settings for better compatibility
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
+CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight requests for 24 hours
 
 # Business Logic Constants
 DEFAULT_CREDIT_LIMIT = 50000  # ₦50,000 initial credit
