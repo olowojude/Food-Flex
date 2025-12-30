@@ -11,6 +11,13 @@ from .serializers import (
     UpdateCartItemSerializer, OrderListSerializer, OrderDetailSerializer,
     ConfirmOrderSerializer, OrderQRCodeSerializer
 )
+from accounts.permissions import IsSeller
+import json
+import qrcode
+from io import BytesIO
+import base64
+from django.db import transaction
+
 
 
 # Cart Views
@@ -207,6 +214,7 @@ def clear_cart(request):
         )
 
 
+
 # Order Views
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
@@ -313,8 +321,36 @@ def checkout(request):
                 reference=order.order_number
             )
             
-            # Generate QR code
-            qr_code_base64 = order.generate_qr_code()
+            # ✅ Generate QR code with order information (JSON format)
+            qr_data = json.dumps({
+                'order_id': order.id,
+                'order_number': order.order_number,
+                'total_amount': str(order.total_amount),
+                'buyer_id': user.id,
+                'seller_id': seller.id
+            })
+            
+            # Create QR code image
+            qr = qrcode.QRCode(
+                version=1,  # Controls size (1-40, 1 is smallest)
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,  # Pixels per box
+                border=4,  # Boxes of border
+            )
+            qr.add_data(qr_data)
+            qr.make(fit=True)
+            
+            # Generate image
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to base64
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            qr_code_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+            
+            # Save QR code URL to order (optional - if you want to store it)
+            # order.qr_code_token = qr_data  # Store the raw data
+            order.save()
             
             # Clear cart
             cart.clear()
@@ -323,7 +359,7 @@ def checkout(request):
                 {
                     'message': 'Order placed successfully',
                     'order': OrderDetailSerializer(order).data,
-                    'qr_code_base64': qr_code_base64
+                    'qr_code_base64': qr_code_base64  # This is what frontend needs
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -336,6 +372,69 @@ def checkout(request):
     except Exception as e:
         return Response(
             {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+
+@api_view(['POST'])
+@permission_classes([IsSeller])
+def verify_qr_code(request):
+    """
+    Seller verifies buyer's QR code
+    """
+    qr_data = request.data.get('qr_data')
+    
+    if not qr_data:
+        return Response(
+            {'error': 'QR code data is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Parse QR data
+        try:
+            data = json.loads(qr_data)
+            order_id = data.get('order_id')
+            order_number = data.get('order_number')
+        except (json.JSONDecodeError, AttributeError):
+            # Not JSON, treat as order number
+            order_number = qr_data
+            order_id = None
+        
+        # Find the order
+        if order_id:
+            order = Order.objects.get(id=order_id, seller=request.user)
+        elif order_number:
+            order = Order.objects.get(order_number=order_number, seller=request.user)
+        else:
+            raise Order.DoesNotExist
+        
+        # Check if order is in correct status
+        if order.status not in ['PENDING', 'CONFIRMED']:
+            return Response(
+                {'error': f'This order is already {order.status}. Cannot scan again.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Return order details
+        return Response({
+            'id': order.id,
+            'order_number': order.order_number,
+            'status': order.status,
+            'buyer_name': order.buyer.get_full_name(),
+            'total_amount': str(order.total_amount),
+            'items_count': order.items.count(),
+            'message': 'QR code verified successfully'
+        }, status=status.HTTP_200_OK)
+        
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Invalid QR code or order not found for your store'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to verify QR code: {str(e)}'},
             status=status.HTTP_400_BAD_REQUEST
         )
 
@@ -367,44 +466,68 @@ def save_qr_code(request, order_id):
 
 
 @api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([IsSeller])
 def verify_qr_code(request):
-    """Seller verifies QR code"""
-    user = request.user
+    """
+    Seller verifies buyer's QR code
+    """
+    qr_data = request.data.get('qr_data')
     
-    if user.role != 'SELLER':
+    if not qr_data:
         return Response(
-            {'error': 'Only sellers can verify orders'},
-            status=status.HTTP_403_FORBIDDEN
+            {'error': 'QR code data is required'},
+            status=status.HTTP_400_BAD_REQUEST
         )
     
-    serializer = ConfirmOrderSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        qr_code_token = serializer.validated_data['qr_code_token']
+    try:
+        import json
         
+        # Parse QR data
         try:
-            order = Order.objects.get(
-                qr_code_token=qr_code_token,
-                seller=user,
-                status=Order.OrderStatus.PENDING
-            )
-            
+            data = json.loads(qr_data)
+            order_id = data.get('order_id')
+            order_number = data.get('order_number')
+        except (json.JSONDecodeError, AttributeError):
+            # Not JSON, treat as order number
+            order_number = qr_data
+            order_id = None
+        
+        # Find the order
+        if order_id:
+            order = Order.objects.get(id=order_id, seller=request.user)
+        elif order_number:
+            order = Order.objects.get(order_number=order_number, seller=request.user)
+        else:
+            raise Order.DoesNotExist
+        
+        # Check if order is in correct status
+        if order.status not in ['PENDING', 'CONFIRMED']:
             return Response(
-                {
-                    'message': 'QR code verified',
-                    'order': OrderDetailSerializer(order).data
-                },
-                status=status.HTTP_200_OK
+                {'error': f'This order is already {order.status}. Cannot scan again.'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            
-        except Order.DoesNotExist:
-            return Response(
-                {'error': 'Invalid QR code or order not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Return order details
+        return Response({
+            'id': order.id,
+            'order_number': order.order_number,
+            'status': order.status,
+            'buyer_name': order.buyer.get_full_name(),
+            'total_amount': str(order.total_amount),
+            'items_count': order.items.count(),
+            'message': 'QR code verified successfully'
+        }, status=status.HTTP_200_OK)
+        
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Invalid QR code or order not found for your store'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to verify QR code: {str(e)}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
 
 @api_view(['POST'])

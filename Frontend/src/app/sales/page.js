@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Seller Sales Page with QR Scanner Integration
- * Save as: frontend/src/app/sales/page.js (REPLACE)
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -28,6 +23,7 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [scanningOrderId, setScanningOrderId] = useState(null);
+  const [processing, setProcessing] = useState(false); // ✅ FIXED: Added missing state
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -85,23 +81,57 @@ export default function SalesPage() {
     setShowScanner(true);
   };
 
-  const handleScanSuccess = async ({ orderNumber, qrToken }) => {
-    console.log('QR Scanned:', { orderNumber, qrToken });
+  const handleScanSuccess = async ({ orderData, qrData }) => {
+    console.log('QR Scanned:', orderData);
     
     setShowScanner(false);
+    setProcessing(true);
 
-    // Verify the QR code with backend first
     try {
-      const response = await orderAPI.verifyQRCode({ qr_code_token: qrToken });
+      // Extract order info from QR code
+      const orderId = orderData.order_id || scanningOrderId;
+      const orderNumber = orderData.order_number;
+
+      if (!orderId && !orderNumber) {
+        throw new Error('Invalid QR code data');
+      }
+
+      // Find the order in our list to verify
+      const order = orders.find(o => 
+        o.id === orderId || o.order_number === orderNumber
+      );
+
+      if (!order) {
+        alert('❌ This QR code does not match any of your orders!');
+        setProcessing(false);
+        return;
+      }
+
+      if (order.status !== 'PENDING') {
+        alert(`⚠️ This order is already ${order.status}. Cannot scan again.`);
+        setProcessing(false);
+        return;
+      }
+
+      // Verify with backend
+      const response = await orderAPI.verifyQRCode({ qr_data: qrData });
       
-      if (response.data.order) {
-        // Navigate to order detail page with scan flag
-        router.push(`/orders/${response.data.order.id}?scan=true&token=${qrToken}`);
+      if (response.data.id) {
+        // ✅ Success - redirect to order detail with scan flag
+        console.log('✅ QR Verified! Redirecting to order details...');
+        router.push(`/orders/${response.data.id}?scan=true`);
       }
     } catch (error) {
       console.error('QR verification error:', error);
-      alert(error.response?.data?.error || 'Invalid QR code. Please try again.');
+      alert(error.response?.data?.error || error.message || 'Invalid QR code. Please try again.');
+      setProcessing(false);
     }
+  };
+
+  const handleScanError = (error) => {
+    console.error('Scan error:', error);
+    setShowScanner(false);
+    setProcessing(false);
   };
 
   const handleCompleteOrder = async (orderId) => {
@@ -109,8 +139,8 @@ export default function SalesPage() {
 
     try {
       await orderAPI.completeOrder(orderId);
-      alert('Order completed successfully!');
-      fetchOrders();
+      alert('✅ Order completed successfully!');
+      fetchOrders(); // Refresh orders
     } catch (error) {
       console.error('Error completing order:', error);
       alert(error.response?.data?.error || 'Failed to complete order');
@@ -180,7 +210,12 @@ export default function SalesPage() {
       {showScanner && (
         <QRScanner
           onScanSuccess={handleScanSuccess}
-          onClose={() => setShowScanner(false)}
+          onScanError={handleScanError}
+          onClose={() => {
+            setShowScanner(false);
+            setProcessing(false);
+          }}
+          isProcessing={processing}
         />
       )}
 
@@ -374,10 +409,11 @@ export default function SalesPage() {
                       <Button
                         variant="primary"
                         onClick={() => handleScanClick(order.id)}
+                        disabled={processing}
                         className="w-full"
                       >
                         <Camera className="w-4 h-4 mr-2" />
-                        Scan QR Code
+                        {processing ? 'Processing...' : 'Scan QR Code'}
                       </Button>
                     )}
 

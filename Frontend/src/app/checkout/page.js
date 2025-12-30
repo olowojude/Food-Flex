@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Checkout Page - Clears cart after successful purchase
- * Save as: frontend/src/app/checkout/page.js (REPLACE)
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -54,14 +49,14 @@ export default function CheckoutPage() {
 
       // Call checkout API
       const response = await orderAPI.checkout();
+      console.log('Checkout response:', response.data);
       
-      // ✅ IMPORTANT: Refresh cart after successful checkout
-      // This clears the cart and updates the navbar badge to 0
+      // ✅ FIXED: Store with correct keys that success page expects
+      sessionStorage.setItem('checkout_order', JSON.stringify(response.data.order));
+      sessionStorage.setItem('checkout_qr', response.data.qr_code_base64);
+      
+      // ✅ Clear cart after successful checkout
       await fetchCart();
-      
-      // Store order data and QR code in sessionStorage
-      sessionStorage.setItem('orderData', JSON.stringify(response.data.order));
-      sessionStorage.setItem('qrCodeBase64', response.data.qr_code_base64);
       
       // Redirect to success page
       router.push('/checkout/success');
@@ -246,7 +241,7 @@ export default function CheckoutPage() {
                 className="w-full"
               >
                 <CheckCircle className="w-5 h-5 inline mr-2" />
-                Complete Purchase
+                {processing ? 'Processing...' : 'Complete Purchase'}
               </Button>
 
               <p className="text-xs text-gray-600 text-center">

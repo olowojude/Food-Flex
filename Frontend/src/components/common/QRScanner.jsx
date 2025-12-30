@@ -1,55 +1,73 @@
 'use client';
 
 /**
- * QR Scanner Component - Xender Style
- * Save as: frontend/src/components/common/QRScanner.jsx
+ * QR Scanner Component - Updated for JSON QR Codes
+ * Save as: frontend/src/components/common/QRScanner.jsx (REPLACE)
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Camera, Upload, AlertCircle } from 'lucide-react';
+import { X, Camera, Upload, AlertCircle, CheckCircle } from 'lucide-react';
 import Button from './Button';
+import LoadingSpinner from './LoadingSpinner';
 
-export default function QRScanner({ onScanSuccess, onClose }) {
+export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = null }) {
   const [scanning, setScanning] = useState(false);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState(null);
-  const [cameraPermission, setCameraPermission] = useState(null);
+  const [success, setSuccess] = useState(null);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const scanIntervalRef = useRef(null);
+  const jsQRRef = useRef(null);
 
   useEffect(() => {
+    // Load jsQR library dynamically
+    loadJsQR();
+    
     return () => {
       stopCamera();
     };
   }, []);
 
+  const loadJsQR = async () => {
+    try {
+      const jsQR = (await import('jsqr')).default;
+      jsQRRef.current = jsQR;
+    } catch (err) {
+      console.error('Failed to load jsQR:', err);
+      setError('QR scanner library failed to load. Please refresh the page.');
+    }
+  };
+
   const startCamera = async () => {
     try {
       setError(null);
+      setSuccess(null);
       setScanning(true);
 
-      // Request camera permission
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' } // Use back camera on mobile
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
       });
 
       streamRef.current = stream;
-      setCameraPermission('granted');
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        await videoRef.current.play();
 
-        // Start scanning
+        // Start scanning loop
         scanIntervalRef.current = setInterval(() => {
           captureAndDecode();
-        }, 500); // Scan every 500ms
+        }, 300); // Scan every 300ms
       }
     } catch (err) {
       console.error('Camera error:', err);
-      setError('Failed to access camera. Please grant camera permission.');
-      setCameraPermission('denied');
+      setError('Failed to access camera. Please grant camera permission or try uploading an image.');
       setScanning(false);
     }
   };
@@ -72,11 +90,13 @@ export default function QRScanner({ onScanSuccess, onClose }) {
   };
 
   const captureAndDecode = () => {
-    if (!videoRef.current || !canvasRef.current) return;
+    if (!videoRef.current || !canvasRef.current || !jsQRRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
+
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
     // Set canvas size to video size
     canvas.width = video.videoWidth;
@@ -88,64 +108,54 @@ export default function QRScanner({ onScanSuccess, onClose }) {
     // Get image data
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Try to decode QR code using jsQR library
-    try {
-      // Note: You'll need to install jsqr: npm install jsqr
-      // For now, we'll use a simpler approach with native browser APIs
-      decodeQRFromCanvas(canvas);
-    } catch (err) {
-      console.error('Decode error:', err);
-    }
-  };
+    // Decode QR code using jsQR
+    const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
+      inversionAttempts: "dontInvert",
+    });
 
-  const decodeQRFromCanvas = async (canvas) => {
-    try {
-      // Convert canvas to blob
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-
-        // Use BarcodeDetector API if available (Chrome, Edge)
-        if ('BarcodeDetector' in window) {
-          try {
-            const barcodeDetector = new window.BarcodeDetector({ formats: ['qr_code'] });
-            const barcodes = await barcodeDetector.detect(blob);
-
-            if (barcodes.length > 0) {
-              const qrData = barcodes[0].rawValue;
-              handleQRDetected(qrData);
-            }
-          } catch (err) {
-            console.error('BarcodeDetector error:', err);
-          }
-        }
-      });
-    } catch (err) {
-      console.error('Decode error:', err);
+    if (code && code.data) {
+      handleQRDetected(code.data);
     }
   };
 
   const handleQRDetected = (qrData) => {
     console.log('QR Code detected:', qrData);
 
-    // Stop camera
+    // Stop camera immediately
     stopCamera();
+    setProcessing(true);
 
-    // Extract order info from QR data
-    // Format: FOODFLEX_ORDER:ORDER_NUMBER:QR_TOKEN
-    if (qrData.startsWith('FOODFLEX_ORDER:')) {
-      const parts = qrData.split(':');
-      if (parts.length === 3) {
-        const orderNumber = parts[1];
-        const qrToken = parts[2];
-
-        onScanSuccess({ orderNumber, qrToken });
-      } else {
-        setError('Invalid QR code format');
-        setScanning(false);
+    try {
+      // Parse JSON QR data
+      let orderData;
+      try {
+        orderData = JSON.parse(qrData);
+      } catch (e) {
+        // If not JSON, show error
+        throw new Error('Invalid QR code format. This does not appear to be a FoodFlex order QR code.');
       }
-    } else {
-      setError('This is not a FoodFlex order QR code');
-      setScanning(false);
+
+      // Validate required fields
+      if (!orderData.order_id && !orderData.order_number) {
+        throw new Error('Invalid QR code. Missing order information.');
+      }
+
+      // Check if this matches expected order (if provided)
+      if (expectedOrderId && orderData.order_id !== expectedOrderId) {
+        throw new Error('This QR code is for a different order!');
+      }
+
+      // Success!
+      setSuccess(`Order #${orderData.order_number} detected!`);
+      
+      // Delay slightly to show success message
+      setTimeout(() => {
+        onScanSuccess({ orderData, qrData });
+      }, 1000);
+
+    } catch (err) {
+      setError(err.message);
+      setProcessing(false);
     }
   };
 
@@ -153,9 +163,15 @@ export default function QRScanner({ onScanSuccess, onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!jsQRRef.current) {
+      setError('QR scanner not ready. Please wait a moment and try again.');
+      return;
+    }
+
     try {
       setError(null);
-      setScanning(true);
+      setSuccess(null);
+      setProcessing(true);
 
       // Create image element
       const img = new Image();
@@ -165,7 +181,7 @@ export default function QRScanner({ onScanSuccess, onClose }) {
         img.src = e.target.result;
       };
 
-      img.onload = async () => {
+      img.onload = () => {
         // Draw image to canvas
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
@@ -174,16 +190,32 @@ export default function QRScanner({ onScanSuccess, onClose }) {
         canvas.height = img.height;
         context.drawImage(img, 0, 0);
 
-        // Try to decode
-        await decodeQRFromCanvas(canvas);
-        setScanning(false);
+        // Get image data
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+        // Decode QR code
+        const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && code.data) {
+          handleQRDetected(code.data);
+        } else {
+          setError('No QR code found in image. Please try with a clearer image.');
+          setProcessing(false);
+        }
+      };
+
+      img.onerror = () => {
+        setError('Failed to load image. Please try another file.');
+        setProcessing(false);
       };
 
       reader.readAsDataURL(file);
     } catch (err) {
       console.error('File upload error:', err);
       setError('Failed to read QR code from image');
-      setScanning(false);
+      setProcessing(false);
     }
   };
 
@@ -211,7 +243,8 @@ export default function QRScanner({ onScanSuccess, onClose }) {
 
         {/* Scanner Area */}
         <div className="p-6">
-          {!scanning && !error && (
+          {/* Initial State */}
+          {!scanning && !processing && !error && !success && (
             <div className="text-center space-y-4">
               <div className="w-32 h-32 mx-auto bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
                 <Camera className="w-16 h-16 text-blue-600" />
@@ -256,13 +289,14 @@ export default function QRScanner({ onScanSuccess, onClose }) {
             </div>
           )}
 
-          {scanning && !error && (
+          {/* Scanning State */}
+          {scanning && !processing && (
             <div className="text-center">
               <div className="relative mx-auto" style={{ maxWidth: '400px' }}>
                 {/* Video Preview */}
                 <video
                   ref={videoRef}
-                  className="w-full rounded-lg"
+                  className="w-full rounded-lg bg-black"
                   playsInline
                   muted
                 />
@@ -298,6 +332,33 @@ export default function QRScanner({ onScanSuccess, onClose }) {
             </div>
           )}
 
+          {/* Processing State */}
+          {processing && !success && !error && (
+            <div className="text-center py-12">
+              <LoadingSpinner size="xl" />
+              <p className="mt-4 text-gray-600">Verifying QR code...</p>
+            </div>
+          )}
+
+          {/* Success State */}
+          {success && (
+            <div className="text-center space-y-4">
+              <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                <CheckCircle className="w-10 h-10 text-green-600" />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  QR Code Verified!
+                </h3>
+                <p className="text-green-600">{success}</p>
+              </div>
+
+              <p className="text-sm text-gray-500">Redirecting to order details...</p>
+            </div>
+          )}
+
+          {/* Error State */}
           {error && (
             <div className="text-center space-y-4">
               <div className="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center">
@@ -311,16 +372,29 @@ export default function QRScanner({ onScanSuccess, onClose }) {
                 <p className="text-red-600">{error}</p>
               </div>
 
-              <Button
-                onClick={() => {
-                  setError(null);
-                  startCamera();
-                }}
-                variant="primary"
-                className="w-full"
-              >
-                Try Again
-              </Button>
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => {
+                    setError(null);
+                    startCamera();
+                  }}
+                  variant="primary"
+                  className="flex-1"
+                >
+                  Try Camera Again
+                </Button>
+                <label className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div className="btn-secondary w-full cursor-pointer text-center">
+                    Upload Image
+                  </div>
+                </label>
+              </div>
             </div>
           )}
 

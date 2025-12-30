@@ -128,11 +128,7 @@ class Order(models.Model):
     )
     
     # QR Code
-    qr_code_token = models.CharField(
-        max_length=100,
-        unique=True,
-        editable=False
-    )
+    qr_code_token = models.TextField(blank=True, null=True)
     qr_code_image = models.URLField(blank=True, null=True)
     
     # Timestamps

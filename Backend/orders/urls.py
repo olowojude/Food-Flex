@@ -13,6 +13,7 @@ urlpatterns = [
     
     # Checkout
     path('checkout/', views.checkout, name='checkout'),
+    path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
     
     # Orders (unified for both buyers and sellers - permissions handle the difference)
     path('', views.my_orders, name='my_orders'),  # GET for buyers, different response for sellers

@@ -138,6 +138,7 @@ export const orderAPI = {
   verifyQRCode: (data) => api.post('/orders/verify-qr/', data),
   confirmOrder: (orderId) => api.post(`/orders/${orderId}/confirm/`),
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
+  saveQRCode: (orderId, data) => api.patch(`/orders/${orderId}/qr-code/`, data),
 };
 
 // ============================================================================
