@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Seller Inventory Page - Production Version
- * Save as: frontend/src/app/inventory/page.js (REPLACE)
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -43,7 +38,6 @@ export default function InventoryPage() {
   // Auto-refresh when page gains focus
   useEffect(() => {
     const handleFocus = () => {
-      console.log('Page focused - refreshing products');
       fetchProducts();
     };
 
@@ -64,11 +58,10 @@ export default function InventoryPage() {
       
       setProducts(sorted);
       setFilteredProducts(sorted);
-      console.log('Products loaded:', sorted.length);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      setLoading(false);
+      setError('Failed to fetch products');
       
-      // Show helpful error message
       if (error.response?.status === 403) {
         showToast('You need seller permissions to access inventory', 'error');
       } else {
@@ -182,7 +175,7 @@ export default function InventoryPage() {
             </Link>
           </div>
 
-          {/* Stats Cards */}
+          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center gap-3">
@@ -370,7 +363,7 @@ export default function InventoryPage() {
 
                       <div className="flex flex-wrap items-center gap-4 mb-3">
                         <div className="flex items-center gap-2">
-                          <DollarSign className="w-4 h-4 text-gray-500" />
+                          {/* <DollarSign className="w-4 h-4 text-gray-500" /> */}
                           <span className="text-sm font-medium text-gray-900">
                             ₦{parseFloat(product.price).toLocaleString()}
                           </span>
@@ -382,7 +375,7 @@ export default function InventoryPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Eye className="w-4 h-4 text-gray-500" />
+                          {/* <Eye className="w-4 h-4 text-gray-500" /> */}
                           <span className="text-sm text-gray-600">
                             {product.views_count} views
                           </span>

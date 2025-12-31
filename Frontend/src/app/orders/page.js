@@ -32,7 +32,6 @@ export default function OrdersPage() {
       const response = await orderAPI.getMyOrders(params);
       setOrders(response.data.results || response.data);
     } catch (error) {
-      console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }

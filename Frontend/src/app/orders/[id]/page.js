@@ -41,10 +41,8 @@ function OrderDetailContent() {
     try {
       setLoading(true);
       const response = await orderAPI.getOrderDetail(orderId);
-      console.log('Order data:', response.data);
       setOrder(response.data);
     } catch (error) {
-      console.error('Error fetching order:', error);
       setError(error.response?.data?.error || 'Failed to load order');
     } finally {
       setLoading(false);
@@ -65,7 +63,6 @@ function OrderDetailContent() {
         router.push('/sales');
       }, 1500);
     } catch (error) {
-      console.error('Error confirming order:', error);
       alert(error.response?.data?.error || 'Failed to confirm order');
     } finally {
       setConfirming(false);
@@ -86,7 +83,6 @@ function OrderDetailContent() {
         router.push('/sales');
       }, 1500);
     } catch (error) {
-      console.error('Error completing order:', error);
       alert(error.response?.data?.error || 'Failed to complete order');
     } finally {
       setCompleting(false);

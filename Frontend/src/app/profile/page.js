@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Profile Page with Loan Repayment Feature
- * Save as: frontend/src/app/profile/page.js (REPLACE)
- */
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -72,7 +68,6 @@ export default function ProfilePage() {
         setOrders(ordersRes.data.results?.slice(0, 5) || ordersRes.data.slice(0, 5));
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -120,7 +115,6 @@ export default function ProfilePage() {
         showToast('Failed to update profile picture', 'error');
       }
     } catch (error) {
-      console.error('Error uploading image:', error);
       showToast('Failed to upload image. Please try again.', 'error');
     } finally {
       setUploadingImage(false);
@@ -143,8 +137,7 @@ export default function ProfilePage() {
 
   const handleRepayment = async (amount) => {
     try {
-      // This needs to be implemented in your API
-      // For now, we'll show a placeholder
+      // Not yet implemented
       const response = await creditAPI.processRepayment(user.id, { 
         amount: amount 
       });
@@ -161,7 +154,6 @@ export default function ProfilePage() {
       // Refresh credit data
       await fetchData();
     } catch (error) {
-      console.error('Repayment error:', error);
       throw new Error(error.response?.data?.error || 'Repayment failed. Please try again.');
     }
   };
@@ -402,7 +394,7 @@ export default function ProfilePage() {
               <div className="space-y-6">
                 {/* Repay Loan Button (Prominent) */}
                 {outstandingBalance > 0 && (
-                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+                  <div className="bg-linear-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
@@ -438,7 +430,7 @@ export default function ProfilePage() {
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-600">Available Credit</p>
-                      <DollarSign className="w-5 h-5 text-green-600" />
+                      {/* <DollarSign className="w-5 h-5 text-green-600" /> */}
                     </div>
                     <p className="text-3xl font-bold text-green-600">
                       ₦{availableCredit.toLocaleString()}

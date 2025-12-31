@@ -1,12 +1,8 @@
-# Backend/shop/serializers.py
-# REPLACE THE ENTIRE FILE
-
 from rest_framework import serializers
 from .models import Category, Product, ProductReview
 
 
 class CategorySerializer(serializers.ModelSerializer):
-    """Category Serializer - NO IMAGE FIELD"""
     product_count = serializers.ReadOnlyField()
     
     class Meta:
@@ -15,7 +11,6 @@ class CategorySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'slug', 'created_at']
     
     def validate_name(self, value):
-        """Check for duplicate names (case-insensitive)"""
         category_id = self.instance.id if self.instance else None
         if Category.objects.filter(name__iexact=value).exclude(id=category_id).exists():
             raise serializers.ValidationError("A category with this name already exists.")
@@ -23,7 +18,6 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class SellerInfoSerializer(serializers.Serializer):
-    """Serializer for seller information in products"""
     id = serializers.IntegerField(read_only=True)
     email = serializers.EmailField(read_only=True)
     phone = serializers.CharField(source='phone_number', read_only=True)
@@ -32,10 +26,6 @@ class SellerInfoSerializer(serializers.Serializer):
     business_address = serializers.SerializerMethodField()
     
     def get_store_name(self, obj):
-        """
-        Get store name from seller profile or generate from first name.
-        obj here is the User (seller) object.
-        """
         # Try to get from seller profile first
         if hasattr(obj, 'seller_profile') and obj.seller_profile:
             profile = obj.seller_profile
@@ -54,13 +44,11 @@ class SellerInfoSerializer(serializers.Serializer):
         return f"{obj.email.split('@')[0]}'s Store"
     
     def get_business_name(self, obj):
-        """Get business name from seller profile"""
         if hasattr(obj, 'seller_profile') and obj.seller_profile:
             return obj.seller_profile.business_name
         return self.get_store_name(obj)
     
     def get_business_address(self, obj):
-        """Get business address from seller profile or user address"""
         if hasattr(obj, 'seller_profile') and obj.seller_profile:
             if obj.seller_profile.business_address:
                 return obj.seller_profile.business_address
@@ -73,7 +61,6 @@ class SellerInfoSerializer(serializers.Serializer):
 
 
 class ProductListSerializer(serializers.ModelSerializer):
-    """Serializer for product list view"""
     category_name = serializers.CharField(source='category.name', read_only=True)
     seller_name = serializers.SerializerMethodField()
     seller_store_name = serializers.SerializerMethodField()
@@ -91,11 +78,9 @@ class ProductListSerializer(serializers.ModelSerializer):
         read_only_fields = ['slug', 'seller', 'views_count', 'sales_count']
     
     def get_seller_name(self, obj):
-        """Get seller's full name"""
         return obj.seller.get_full_name()
     
     def get_seller_store_name(self, obj):
-        """Get seller's store name"""
         if hasattr(obj.seller, 'seller_profile') and obj.seller.seller_profile:
             profile = obj.seller.seller_profile
             if hasattr(profile, 'get_store_name'):
@@ -110,7 +95,6 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 
 class ProductReviewSerializer(serializers.ModelSerializer):
-    """Serializer for product reviews"""
     buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
     buyer_email = serializers.CharField(source='buyer.email', read_only=True)
     
@@ -129,7 +113,6 @@ class ProductReviewSerializer(serializers.ModelSerializer):
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
-    """Detailed serializer for single product view"""
     category = CategorySerializer(read_only=True)
     seller_info = serializers.SerializerMethodField()
     reviews = ProductReviewSerializer(many=True, read_only=True)
@@ -148,12 +131,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['slug', 'seller', 'views_count', 'sales_count', 'created_at', 'updated_at']
     
     def get_seller_info(self, obj):
-        """Get seller information using SellerInfoSerializer"""
         return SellerInfoSerializer(obj.seller).data
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating products"""
     
     class Meta:
         model = Product
@@ -164,7 +145,6 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         ]
     
     def validate_main_image(self, value):
-        """Validate main image URL"""
         if not value:
             raise serializers.ValidationError("Main image is required")
         if not value.startswith('http'):
@@ -172,7 +152,6 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         return value
     
     def validate_additional_images(self, value):
-        """Validate additional images are URLs"""
         if not isinstance(value, list):
             raise serializers.ValidationError("Additional images must be a list")
         for url in value:
@@ -191,14 +170,12 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         return value
     
     def validate_category(self, value):
-        """Ensure category exists and is active"""
         if not value.is_active:
             raise serializers.ValidationError("Cannot assign product to inactive category")
         return value
 
 
 class ProductReviewCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating reviews"""
     
     class Meta:
         model = ProductReview

@@ -218,7 +218,7 @@ export default function CartPage() {
                 {/* Credit Info */}
                 <div className="mt-6 p-4 bg-blue-50 rounded-lg">
                   <p className="text-sm text-blue-900 font-medium mb-1">
-                    💳 Pay with Credit
+                    Pay with Credit
                   </p>
                   <p className="text-xs text-blue-700">
                     This purchase will be deducted from your available credit

@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Optimized Product Card Component
- * Views count only visible to the seller who owns the product
- */
-
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { ShoppingCart } from 'lucide-react';
@@ -50,7 +45,7 @@ export default function ProductCard({ product, showSellerStats = false }) {
       {/* Product Info */}
       <div className="p-3">
         {/* Product Name - 2 lines max */}
-        <h3 className="text-sm font-medium text-gray-900 mb-1 line-clamp-2 min-h-[2.5rem]">
+        <h3 className="text-sm font-medium text-gray-900 mb-1 line-clamp-2 min-h-10">
           {product.name}
         </h3>
 

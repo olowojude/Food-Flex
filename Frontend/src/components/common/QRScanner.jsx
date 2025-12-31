@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * QR Scanner Component - Updated for JSON QR Codes
- * Save as: frontend/src/components/common/QRScanner.jsx (REPLACE)
- */
 
 import { useState, useEffect, useRef } from 'react';
 import { X, Camera, Upload, AlertCircle, CheckCircle } from 'lucide-react';
@@ -35,7 +31,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
       const jsQR = (await import('jsqr')).default;
       jsQRRef.current = jsQR;
     } catch (err) {
-      console.error('Failed to load jsQR:', err);
       setError('QR scanner library failed to load. Please refresh the page.');
     }
   };
@@ -66,7 +61,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
         }, 300); // Scan every 300ms
       }
     } catch (err) {
-      console.error('Camera error:', err);
       setError('Failed to access camera. Please grant camera permission or try uploading an image.');
       setScanning(false);
     }
@@ -119,7 +113,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
   };
 
   const handleQRDetected = (qrData) => {
-    console.log('QR Code detected:', qrData);
 
     // Stop camera immediately
     stopCamera();
@@ -213,7 +206,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
 
       reader.readAsDataURL(file);
     } catch (err) {
-      console.error('File upload error:', err);
       setError('Failed to read QR code from image');
       setProcessing(false);
     }
@@ -223,7 +215,7 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
     <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white">
+        <div className="bg-linear-to-r from-blue-600 to-indigo-600 p-6 text-white">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold">Scan QR Code</h2>
             <button
@@ -246,7 +238,7 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
           {/* Initial State */}
           {!scanning && !processing && !error && !success && (
             <div className="text-center space-y-4">
-              <div className="w-32 h-32 mx-auto bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
+              <div className="w-32 h-32 mx-auto bg-linear-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center">
                 <Camera className="w-16 h-16 text-blue-600" />
               </div>
 

@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Admin - Orders Page
- * Save as: frontend/src/app/manage/orders/page.js
- */
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -61,7 +57,6 @@ export default function AdminOrdersPage() {
         totalRevenue,
       });
     } catch (error) {
-      console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
@@ -155,7 +150,7 @@ export default function AdminOrdersPage() {
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-gray-600">Revenue</p>
-              <DollarSign className="w-5 h-5 text-green-600" />
+              {/* <DollarSign className="w-5 h-5 text-green-600" /> */}
             </div>
             <p className="text-xl font-bold text-green-600">
               ₦{stats.totalRevenue.toLocaleString()}

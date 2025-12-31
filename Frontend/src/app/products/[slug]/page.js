@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Simplified Product Detail - Uses seller_info from backend
- * Save as: frontend/src/app/products/[slug]/page.js (REPLACE)
- */
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -41,11 +37,9 @@ export default function ProductDetailPage() {
     try {
       setLoading(true);
       const response = await shopAPI.getProduct(params.slug);
-      console.log('Product data:', response.data); // Debug
       setProduct(response.data);
       setSelectedImage(response.data.main_image);
     } catch (error) {
-      console.error('Error fetching product:', error);
       setMessage({ type: 'error', text: 'Product not found' });
     } finally {
       setLoading(false);
@@ -113,9 +107,8 @@ export default function ProductDetailPage() {
   const reviewCount = product.reviews?.length || 0;
   const salesCount = product.sales_count || 0;
   
-  // Get seller info from backend
   const storeName = product.seller_info?.store_name || 'Store';
-  const storeAddress = product.seller_info?.business_address || 'Jos, Plateau State';
+  const storeAddress = product.seller_info?.business_address || '';
 
   return (
     <div className="min-h-screen bg-gray-50 py-4">

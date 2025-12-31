@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Admin - Products Page
- * Save as: frontend/src/app/manage/products/page.js
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -60,7 +55,6 @@ export default function AdminProductsPage() {
         outOfStock: productList.filter(p => !p.is_in_stock).length,
       });
     } catch (error) {
-      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -77,7 +71,6 @@ export default function AdminProductsPage() {
       alert('Product deleted successfully!');
       fetchData();
     } catch (error) {
-      console.error('Error deleting product:', error);
       alert(error.response?.data?.error || 'Failed to delete product');
     } finally {
       setDeleting(null);
@@ -223,7 +216,7 @@ export default function AdminProductsPage() {
               <div key={product.id} className="card p-6 hover:shadow-lg transition">
                 <div className="flex flex-col md:flex-row gap-4">
                   {/* Image */}
-                  <div className="w-full md:w-32 h-32 flex-shrink-0">
+                  <div className="w-full md:w-32 h-32 shrink-0">
                     <img
                       src={product.main_image || 'https://via.placeholder.com/300'}
                       alt={product.name}
@@ -246,7 +239,7 @@ export default function AdminProductsPage() {
 
                     <div className="flex flex-wrap items-center gap-4 mt-3">
                       <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-500" />
+                        {/* <DollarSign className="w-4 h-4 text-gray-500" /> */}
                         <span className="text-sm font-medium text-gray-900">
                           ₦{parseFloat(product.price).toLocaleString()}
                         </span>

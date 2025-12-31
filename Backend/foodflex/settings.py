@@ -6,29 +6,23 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Initialize environment variables
 env = environ.Env(
-    DEBUG=(bool, False)  # Default to False for production safety
+    DEBUG=(bool, False) 
 )
 
-# Read .env file (for local development)
 env_file = os.path.join(BASE_DIR, '.env')
 if os.path.exists(env_file):
     environ.Env.read_env(env_file)
 
-# Security Settings
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env('DEBUG')
 
-# ALLOWED_HOSTS - Handle both comma-separated string and direct list
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
 
-# Add Render.com hostname if present
 RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 if RENDER_EXTERNAL_HOSTNAME:
     ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
 
-# Application definition
 INSTALLED_APPS = [
     'jazzmin',
     'django.contrib.admin',
@@ -38,12 +32,10 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     
-    # Third-party apps
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
     
-    # Local apps
     'accounts',
     'shop',
     'orders',
@@ -84,9 +76,7 @@ TEMPLATES = [
 WSGI_APPLICATION = 'foodflex.wsgi.application'
 
 # Database Configuration
-# Automatically uses PostgreSQL on Render, SQLite locally
 if os.environ.get('DATABASE_URL'):
-    # Production: PostgreSQL on Render
     DATABASES = {
         'default': dj_database_url.config(
             default=os.environ.get('DATABASE_URL'),
@@ -96,7 +86,6 @@ if os.environ.get('DATABASE_URL'):
         )
     }
 else:
-    # Development: SQLite
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
@@ -104,7 +93,6 @@ else:
         }
     }
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -120,27 +108,21 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Africa/Lagos'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# WhiteNoise configuration for efficient static file serving
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
-# Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Custom User Model
 AUTH_USER_MODEL = 'accounts.User'
 
 # REST Framework Configuration
@@ -164,7 +146,7 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(days=1),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,  # Changed to False as per doc
+    'BLACKLIST_AFTER_ROTATION': False,
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
@@ -172,13 +154,11 @@ SIMPLE_JWT = {
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'AUTH_COOKIE': 'access_token',
     'AUTH_COOKIE_REFRESH': 'refresh_token',
-    'AUTH_COOKIE_SECURE': not DEBUG,  # True in production
+    'AUTH_COOKIE_SECURE': not DEBUG, 
     'AUTH_COOKIE_HTTP_ONLY': True,
     'AUTH_COOKIE_SAMESITE': 'Lax',
 }
 
-# Google OAuth (optional)
-GOOGLE_CLIENT_ID = env('GOOGLE_CLIENT_ID', default='')
 
 # CORS Settings
 cors_origins_str = env('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000')
@@ -190,8 +170,7 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
-# For development: Allow all origins (ONLY if DEBUG is True)
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Uncomment this line for easier local development
+# CORS_ALLOW_ALL_ORIGINS = DEBUG  
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -216,7 +195,7 @@ CORS_ALLOW_HEADERS = [
     'x-requested-with',
 ]
 
-# CSRF Trusted Origins (for POST requests)
+# CSRF Trusted Origins
 csrf_origins_str = env('CSRF_TRUSTED_ORIGINS', default='https://food-flexx.vercel.app')
 CSRF_TRUSTED_ORIGINS = [
     origin.strip() 
@@ -227,15 +206,12 @@ CSRF_TRUSTED_ORIGINS = [
 # Cookie settings for cross-origin requests
 SESSION_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True  # Required when SameSite=None
-CSRF_COOKIE_SECURE = True     # Required when SameSite=None
-
-# Additional CORS settings for better compatibility
+SESSION_COOKIE_SECURE = True 
+CSRF_COOKIE_SECURE = True    
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
-CORS_PREFLIGHT_MAX_AGE = 86400  # Cache preflight requests for 24 hours
+CORS_PREFLIGHT_MAX_AGE = 86400 
 
-# Business Logic Constants
-DEFAULT_CREDIT_LIMIT = 50000  # ₦50,000 initial credit
+DEFAULT_CREDIT_LIMIT = 50000 
 CURRENCY_SYMBOL = '₦'
 
 # # Cloudinary Configuration (Optional - for image hosting)
@@ -255,24 +231,19 @@ CURRENCY_SYMBOL = '₦'
 #     except ImportError:
 #         pass  # Cloudinary not installed
 
-# Security Settings for Production
 if not DEBUG:
-    # HTTPS/SSL Settings
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     
-    # Security Headers
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
     
-    # HSTS Settings
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     
-    # Proxy Settings (for Render)
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Jazzmin Configuration
@@ -353,7 +324,7 @@ JAZZMIN_UI_TWEAKS = {
     "theme": "default",
 }
 
-# Logging Configuration (helpful for debugging production issues)
+# Logging Configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

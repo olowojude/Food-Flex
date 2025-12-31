@@ -1,12 +1,5 @@
 'use client';
 
-/**
- * Edit Product Page - FIXED DATA LOADING
- * - Now fetches product by ID directly
- * - Properly retains all previous information
- * - Only need to edit what you want to change
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -62,7 +55,7 @@ export default function EditProductPage() {
       const categoriesRes = await shopAPI.getCategories();
       setCategories(categoriesRes.data);
 
-      // Fetch ALL seller products to find this one
+      // Fetch All seller products to find this one
       const productsRes = await shopAPI.getMyProducts();
       const products = productsRes.data.results || productsRes.data;
       const product = products.find(p => p.id === parseInt(productId));
@@ -76,7 +69,7 @@ export default function EditProductPage() {
       // Store original product for reference
       setOriginalProduct(product);
 
-      // Parse additional images
+      // additional images
       let additionalImages = [];
       if (product.additional_images) {
         try {
@@ -86,7 +79,6 @@ export default function EditProductPage() {
             ? product.additional_images
             : [];
         } catch (e) {
-          console.error('Error parsing additional images:', e);
           additionalImages = [];
         }
       }
@@ -103,15 +95,7 @@ export default function EditProductPage() {
         is_active: product.is_active ?? true,
       });
 
-      console.log('Product loaded:', {
-        name: product.name,
-        stock: product.stock_quantity,
-        price: product.price,
-        category: product.category?.id
-      });
-
     } catch (error) {
-      console.error('Error fetching data:', error);
       showToast('Failed to load product data', 'error');
       setTimeout(() => router.push('/inventory'), 2000);
     } finally {
@@ -185,7 +169,6 @@ export default function EditProductPage() {
         is_active: formData.is_active,
       };
 
-      console.log('Updating product with data:', productData);
 
       await shopAPI.updateProduct(productId, productData);
       showToast('Product updated successfully!', 'success');
@@ -194,7 +177,6 @@ export default function EditProductPage() {
         router.push('/inventory');
       }, 1500);
     } catch (error) {
-      console.error('Error updating product:', error);
       const errorData = error.response?.data;
       
       if (errorData) {
@@ -319,7 +301,7 @@ export default function EditProductPage() {
                 )}
               </div>
 
-              {/* Price and Stock - HIGHLIGHTED */}
+              {/* Price and Stock */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Price (₦)"

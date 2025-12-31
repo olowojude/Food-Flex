@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Search Bar Component
- * Save as: frontend/src/components/common/SearchBar.jsx
- */
 
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

@@ -14,7 +14,6 @@ from .serializers import (
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_account(request):
-    """Buyer views their credit account"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -32,7 +31,6 @@ def my_credit_account(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_transactions(request):
-    """Buyer views their credit transaction history"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -52,7 +50,6 @@ def my_credit_transactions(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_repayment_history(request):
-    """Buyer views their repayment history"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -73,7 +70,6 @@ def my_repayment_history(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_accounts(request):
-    """Admin views all credit accounts"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all credit accounts'},
@@ -94,7 +90,6 @@ def all_credit_accounts(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def credit_account_detail(request, user_id):
-    """Admin views specific user's credit account"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit account details'},
@@ -115,7 +110,6 @@ def credit_account_detail(request, user_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def process_repayment(request, user_id):
-    """Admin processes a loan repayment"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can process repayments'},
@@ -133,18 +127,15 @@ def process_repayment(request, user_id):
                 amount = serializer.validated_data['amount']
                 notes = serializer.validated_data.get('notes', '')
                 
-                # Validate repayment amount
                 if amount > credit_account.outstanding_balance:
                     return Response(
                         {'error': f'Repayment amount exceeds outstanding balance of ₦{credit_account.outstanding_balance:,.2f}'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Process repayment
                 old_balance = credit_account.credit_balance
                 credit_account.process_repayment(amount, request.user)
                 
-                # Create transaction log
                 CreditTransaction.objects.create(
                     credit_account=credit_account,
                     transaction_type=CreditTransaction.TransactionType.REPAYMENT,
@@ -180,7 +171,6 @@ def process_repayment(request, user_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def increase_credit_limit(request, user_id):
-    """Admin increases a user's credit limit"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can increase credit limits'},
@@ -197,19 +187,16 @@ def increase_credit_limit(request, user_id):
                 new_limit = serializer.validated_data['new_limit']
                 reason = serializer.validated_data.get('reason', '')
                 
-                # Validate new limit
                 if new_limit <= credit_account.credit_limit:
                     return Response(
                         {'error': 'New limit must be greater than current limit'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Increase credit limit
                 old_balance = credit_account.credit_balance
                 old_limit = credit_account.credit_limit
                 credit_account.increase_credit_limit(new_limit, request.user)
                 
-                # Create transaction log
                 increase_amount = new_limit - old_limit
                 CreditTransaction.objects.create(
                     credit_account=credit_account,
@@ -246,7 +233,6 @@ def increase_credit_limit(request, user_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_repayment_history(request):
-    """Admin views all repayment history"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all repayment history'},
@@ -261,7 +247,6 @@ def all_repayment_history(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_limit_history(request):
-    """Admin views all credit limit increase history"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit limit history'},

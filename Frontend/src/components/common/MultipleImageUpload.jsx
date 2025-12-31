@@ -199,25 +199,3 @@ export default function MultipleImageUpload({
     </div>
   );
 }
-
-// Usage Example:
-/*
-
-import MultipleImageUpload from '@/components/common/MultipleImageUpload';
-
-function ProductForm() {
-  const [productImages, setProductImages] = useState([]);
-
-  return (
-    <MultipleImageUpload
-      label="Product Images"
-      folder="products"
-      currentImages={productImages}
-      onUploadComplete={(urls) => setProductImages(urls)}
-      maxImages={5}
-      maxSize={5}
-    />
-  );
-}
-
-*/

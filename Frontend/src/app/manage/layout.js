@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Admin Layout with Sidebar Navigation (Mobile Fixed)
- * Save as: frontend/src/app/manage/layout.js (REPLACE)
- */
 
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';

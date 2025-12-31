@@ -23,7 +23,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         }
     
     def validate_email(self, value):
-        """change email to lowercase and check uniqueness (case-insensitive)"""
         email = value.lower().strip()
         
         # Check if email already exists (case-insensitive)
@@ -33,10 +32,8 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return email
     
     def validate_username(self, value):
-        """Change username to lowercase and check uniqueness (case-insensitive)"""
         username = value.lower().strip()
         
-        # Check if username already exists (case-insensitive)
         if User.objects.filter(username__iexact=username).exists():
             raise serializers.ValidationError("A user with this username already exists.")
         
@@ -52,7 +49,6 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password2')
         
-        # Ensure email and username are lowercase
         validated_data['email'] = validated_data['email'].lower().strip()
         validated_data['username'] = validated_data['username'].lower().strip()
         

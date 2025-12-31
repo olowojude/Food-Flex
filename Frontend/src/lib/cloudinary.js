@@ -1,7 +1,4 @@
-/**
- * Cloudinary Upload Utility
- * Save as: frontend/src/lib/cloudinary.js
- */
+
 
 /**
  * Upload a single image to Cloudinary
@@ -140,38 +137,3 @@ export function getOptimizedImageUrl(url, options = {}) {
   // Insert transformations into URL
   return url.replace('/upload/', `/upload/${transformString}/`);
 }
-
-// Example usage in components:
-/*
-
-import { uploadImage, uploadMultipleImages, getOptimizedImageUrl } from '@/lib/cloudinary';
-
-// Single image upload
-const handleImageUpload = async (e) => {
-  const file = e.target.files[0];
-  try {
-    const imageUrl = await uploadImage(file, 'products');
-    console.log('Uploaded:', imageUrl);
-  } catch (error) {
-    console.error('Upload failed:', error.message);
-  }
-};
-
-// Multiple images upload
-const handleMultipleUpload = async (e) => {
-  const files = Array.from(e.target.files);
-  try {
-    const imageUrls = await uploadMultipleImages(files, 'products');
-    console.log('Uploaded:', imageUrls);
-  } catch (error) {
-    console.error('Upload failed:', error.message);
-  }
-};
-
-// Optimize image display
-<img 
-  src={getOptimizedImageUrl(originalUrl, { width: 400, quality: 80 })} 
-  alt="Product"
-/>
-
-*/

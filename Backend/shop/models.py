@@ -4,7 +4,6 @@ from accounts.models import User
 
 
 class Category(models.Model):
-    """Product Category - NO IMAGE FIELD"""
     name = models.CharField(max_length=255, unique=True)
     slug = models.SlugField(max_length=255, unique=True, blank=True)
     description = models.TextField(blank=True, null=True)
@@ -27,13 +26,10 @@ class Category(models.Model):
     
     @property
     def product_count(self):
-        """Count products in this category"""
         return self.products.filter(is_active=True).count()
 
 
-class Product(models.Model):
-    """Product Model"""
-    
+class Product(models.Model):    
     UNIT_CHOICES = (
         ('kg', 'Kilogram'),
         ('g', 'Gram'),
@@ -64,19 +60,15 @@ class Product(models.Model):
     weight = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='kg')
     
-    # Images (URLs only)
     main_image = models.URLField(max_length=500)
     additional_images = models.JSONField(default=list, blank=True)
     
-    # Settings
     is_active = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
     
-    # Statistics
     views_count = models.IntegerField(default=0)
     sales_count = models.IntegerField(default=0)
     
-    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -109,7 +101,6 @@ class Product(models.Model):
     
     @property
     def average_rating(self):
-        """Calculate average rating from reviews"""
         reviews = self.reviews.all()
         if reviews.exists():
             total = sum(review.rating for review in reviews)
@@ -117,7 +108,6 @@ class Product(models.Model):
         return 0
     
     def reduce_stock(self, quantity):
-        """Reduce stock when order is completed"""
         if self.stock_quantity >= quantity:
             self.stock_quantity -= quantity
             self.sales_count += quantity
@@ -126,13 +116,11 @@ class Product(models.Model):
         return False
     
     def increment_views(self):
-        """Increment view count"""
         self.views_count += 1
         self.save(update_fields=['views_count'])
 
 
 class ProductReview(models.Model):
-    """Product Review Model"""
     product = models.ForeignKey(
         Product,
         on_delete=models.CASCADE,

@@ -1,15 +1,5 @@
 'use client';
 
-/**
- * Create Product Page - COMPLETE FIXED VERSION
- * Path: frontend/src/app/inventory/new/page.js
- * 
- * Changes:
- * - Removed is_featured checkbox (admin-only)
- * - Removed weight and unit fields
- * - Fixed description field styling (proper border and width)
- * - Added toast notifications instead of alerts
- */
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -28,7 +18,6 @@ export default function CreateProductPage() {
   const router = useRouter();
   const { isAuthenticated, isSeller } = useAuth();
   
-  // State
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -63,7 +52,6 @@ export default function CreateProductPage() {
       const response = await shopAPI.getCategories();
       setCategories(response.data);
     } catch (error) {
-      console.error('Error fetching categories:', error);
       showToast('Failed to load categories', 'error');
     } finally {
       setLoading(false);
@@ -260,7 +248,7 @@ export default function CreateProductPage() {
                 )}
               </div>
 
-              {/* Description - FIXED: Now has proper border and full width */}
+              {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Description <span className="text-red-500">*</span>
@@ -281,7 +269,7 @@ export default function CreateProductPage() {
                 )}
               </div>
 
-              {/* Price and Stock - Grid Layout */}
+              {/* Price and Stock (Grid Layout) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Price (₦)"

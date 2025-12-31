@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Admin - People Page with Full CRUD (No Inactive Status)
- * Save as: frontend/src/app/manage/people/page.js (REPLACE)
- */
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -67,7 +63,6 @@ export default function PeoplePage() {
         admins: allUsers.filter(u => u.role === 'ADMIN').length,
       });
     } catch (error) {
-      console.error('Error fetching users:', error);
     } finally {
       setLoading(false);
     }
@@ -110,7 +105,6 @@ export default function PeoplePage() {
       closeEditModal();
       fetchUsers();
     } catch (error) {
-      console.error('Error updating user:', error);
       alert(error.response?.data?.error || 'Failed to update user');
     } finally {
       setSubmitting(false);
@@ -128,7 +122,6 @@ export default function PeoplePage() {
       alert('User deleted successfully!');
       fetchUsers();
     } catch (error) {
-      console.error('Error deleting user:', error);
       alert(error.response?.data?.error || 'Failed to delete user');
     } finally {
       setDeleting(null);
@@ -268,7 +261,7 @@ export default function PeoplePage() {
               <div key={user.id} className="card p-6 hover:shadow-lg transition">
                 <div className="flex flex-col md:flex-row md:items-center gap-4">
                   {/* User Avatar */}
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center">
                       <span className="text-xl font-bold text-blue-600">
                         {user.first_name?.[0]}{user.last_name?.[0]}

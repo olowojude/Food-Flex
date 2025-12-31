@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Root Layout with Global Navbar
- * Save as: frontend/src/app/layout.js (REPLACE)
- */
-
 import { AuthProvider } from '@/context/AuthContext';
 import { CartProvider } from '@/context/CartContext';
 import Navbar from '@/components/common/Navbar';

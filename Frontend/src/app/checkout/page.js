@@ -35,7 +35,6 @@ export default function CheckoutPage() {
       const creditRes = await creditAPI.getMyCreditAccount();
       setCreditAccount(creditRes.data);
     } catch (error) {
-      console.error('Error fetching checkout data:', error);
       setError('Failed to load checkout data');
     } finally {
       setLoading(false);
@@ -47,21 +46,17 @@ export default function CheckoutPage() {
       setProcessing(true);
       setError('');
 
-      // Call checkout API
       const response = await orderAPI.checkout();
-      console.log('Checkout response:', response.data);
       
-      // ✅ FIXED: Store with correct keys that success page expects
       sessionStorage.setItem('checkout_order', JSON.stringify(response.data.order));
       sessionStorage.setItem('checkout_qr', response.data.qr_code_base64);
       
-      // ✅ Clear cart after successful checkout
+      // Clear cart after successful checkout
       await fetchCart();
       
       // Redirect to success page
       router.push('/checkout/success');
     } catch (error) {
-      console.error('Checkout error:', error);
       setError(error.response?.data?.error || 'Checkout failed. Please try again.');
     } finally {
       setProcessing(false);

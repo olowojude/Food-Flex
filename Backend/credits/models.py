@@ -2,15 +2,11 @@ from django.db import models
 from django.core.validators import MinValueValidator
 from accounts.models import User
 
-# Default credit limit constant
-DEFAULT_CREDIT_LIMIT = 50000  # ₦50,000
+# Default credit limit
+DEFAULT_CREDIT_LIMIT = 50000 
 
 
 class CreditAccount(models.Model):
-    """
-    Manages buyer's credit/loan account
-    Each buyer has one credit account
-    """
     class LoanStatus(models.TextChoices):
         ACTIVE = 'ACTIVE', 'Active'
         EXHAUSTED = 'EXHAUSTED', 'Exhausted'
@@ -57,11 +53,9 @@ class CreditAccount(models.Model):
         max_digits=12,
         decimal_places=2,
         default=0.00
-    )
-    
+    )    
     last_repayment_date = models.DateTimeField(null=True, blank=True)
     
-    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -78,23 +72,19 @@ class CreditAccount(models.Model):
     
     @property
     def available_credit(self):
-        """Return available credit balance"""
         return self.credit_balance
     
     @property
     def outstanding_balance(self):
-        """Calculate outstanding loan amount"""
         return self.credit_limit - self.credit_balance
     
     def can_purchase(self, amount):
-        """Check if user has sufficient credit for purchase"""
         return (
             self.loan_status == self.LoanStatus.ACTIVE and
             self.credit_balance >= amount
         )
     
     def deduct_credit(self, amount):
-        """Deduct credit after purchase"""
         if not self.can_purchase(amount):
             raise ValueError(
                 f"Insufficient credit. Available: ₦{self.credit_balance:,.2f}, Required: ₦{amount:,.2f}"
@@ -110,7 +100,6 @@ class CreditAccount(models.Model):
         self.save()
     
     def process_repayment(self, amount, repaid_by_admin):
-        """Process loan repayment"""
         from django.utils import timezone
         
         if amount <= 0:
@@ -137,7 +126,6 @@ class CreditAccount(models.Model):
         )
     
     def increase_credit_limit(self, new_limit, approved_by_admin):
-        """Admin increases user's credit limit"""
         if new_limit <= self.credit_limit:
             raise ValueError("New limit must be greater than current limit")
         
@@ -159,7 +147,6 @@ class CreditAccount(models.Model):
 
 
 class RepaymentHistory(models.Model):
-    """Track all loan repayments"""
     credit_account = models.ForeignKey(
         CreditAccount,
         on_delete=models.CASCADE,
@@ -194,7 +181,6 @@ class RepaymentHistory(models.Model):
 
 
 class CreditLimitHistory(models.Model):
-    """Track credit limit increases"""
     credit_account = models.ForeignKey(
         CreditAccount,
         on_delete=models.CASCADE,
@@ -229,7 +215,6 @@ class CreditLimitHistory(models.Model):
 
 
 class CreditTransaction(models.Model):
-    """Log all credit transactions"""
     class TransactionType(models.TextChoices):
         PURCHASE = 'PURCHASE', 'Purchase'
         REPAYMENT = 'REPAYMENT', 'Repayment'

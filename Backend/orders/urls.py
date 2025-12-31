@@ -15,16 +15,16 @@ urlpatterns = [
     path('checkout/', views.checkout, name='checkout'),
     path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
     
-    # Orders (unified for both buyers and sellers - permissions handle the difference)
+    # Orders 
     path('', views.my_orders, name='my_orders'),  # GET for buyers, different response for sellers
     path('<int:order_id>/', views.order_detail, name='order_detail'),
     path('<int:order_id>/qr-code/', views.save_qr_code, name='save_qr_code'),
     
-    # Order Actions (seller uses these, but no "seller/" prefix in URL)
+    # Order Actions for seller
     path('<int:order_id>/confirm/', views.confirm_order, name='confirm_order'),
     path('<int:order_id>/complete/', views.complete_order, name='complete_order'),
     path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
     
-    # Management (was admin)
+    # for admin
     path('all/', views.all_orders, name='all_orders'),
 ]

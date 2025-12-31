@@ -24,7 +24,6 @@ export default function RegisterPage() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error when user types
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -75,7 +74,6 @@ export default function RegisterPage() {
     setLoading(false);
 
     if (!result.success) {
-      // Handle API errors
       if (typeof result.error === 'object') {
         setErrors(result.error);
       } else {

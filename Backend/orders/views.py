@@ -24,7 +24,6 @@ from django.db import transaction
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_cart(request):
-    """Get buyer's cart"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -42,7 +41,6 @@ def my_cart(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def add_to_cart(request):
-    """Add product to cart - DOES NOT reduce stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -60,7 +58,6 @@ def add_to_cart(request):
         try:
             product = Product.objects.get(id=product_id, is_active=True)
             
-            # Check stock availability (but don't reduce it)
             if quantity > product.stock_quantity:
                 return Response(
                     {'error': f'Only {product.stock_quantity} units available'},
@@ -109,7 +106,6 @@ def add_to_cart(request):
 @api_view(['PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def update_cart_item(request, item_id):
-    """Update cart item quantity - DOES NOT affect stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -125,7 +121,6 @@ def update_cart_item(request, item_id):
             cart_item = CartItem.objects.get(id=item_id, cart__user=user)
             quantity = serializer.validated_data['quantity']
             
-            # Check stock availability (but don't reduce it)
             if quantity > cart_item.product.stock_quantity:
                 return Response(
                     {'error': f'Only {cart_item.product.stock_quantity} units available'},
@@ -155,7 +150,6 @@ def update_cart_item(request, item_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def remove_from_cart(request, item_id):
-    """Remove item from cart - DOES NOT restore stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -168,7 +162,6 @@ def remove_from_cart(request, item_id):
         cart_item = CartItem.objects.get(id=item_id, cart__user=user)
         cart = cart_item.cart
         
-        # Simply delete the cart item - no stock manipulation
         cart_item.delete()
         
         return Response(
@@ -189,7 +182,6 @@ def remove_from_cart(request, item_id):
 @api_view(['DELETE'])
 @permission_classes([permissions.IsAuthenticated])
 def clear_cart(request):
-    """Clear all items from cart - DOES NOT restore stock"""
     user = request.user
     
     if user.role != 'BUYER':
@@ -219,10 +211,6 @@ def clear_cart(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def checkout(request):
-    """
-    Checkout and create order
-    ⚠️ STOCK IS REDUCED HERE IMMEDIATELY - Prevents double purchases
-    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -259,9 +247,7 @@ def checkout(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Verify stock for all items AND reduce stock immediately
             for cart_item in cart.items.all():
-                # Refresh product data from DB to get latest stock
                 cart_item.product.refresh_from_db()
                 
                 if cart_item.quantity > cart_item.product.stock_quantity:
@@ -274,10 +260,8 @@ def checkout(request):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # ✅ REDUCE STOCK IMMEDIATELY AT CHECKOUT
                 success = cart_item.product.reduce_stock(cart_item.quantity)
                 if not success:
-                    # Rollback will happen automatically due to transaction.atomic()
                     return Response(
                         {
                             'error': f'Failed to reserve stock for {cart_item.product.name}',
@@ -286,11 +270,9 @@ def checkout(request):
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
-            # Get seller (assume all products from same seller)
             first_item = cart.items.first()
             seller = first_item.product.seller
             
-            # Create order
             order = Order.objects.create(
                 buyer=user,
                 seller=seller,
@@ -298,7 +280,6 @@ def checkout(request):
                 status=Order.OrderStatus.PENDING
             )
             
-            # Create order items (snapshot of products at order time)
             for cart_item in cart.items.all():
                 OrderItem.objects.create(
                     order=order,
@@ -306,11 +287,9 @@ def checkout(request):
                     quantity=cart_item.quantity
                 )
             
-            # Deduct credit from buyer
             old_balance = credit_account.credit_balance
             credit_account.deduct_credit(total_amount)
             
-            # Log credit transaction
             CreditTransaction.objects.create(
                 credit_account=credit_account,
                 transaction_type=CreditTransaction.TransactionType.PURCHASE,
@@ -321,7 +300,7 @@ def checkout(request):
                 reference=order.order_number
             )
             
-            # ✅ Generate QR code with order information (JSON format)
+            # Generate QR code with order information
             qr_data = json.dumps({
                 'order_id': order.id,
                 'order_number': order.order_number,
@@ -332,10 +311,10 @@ def checkout(request):
             
             # Create QR code image
             qr = qrcode.QRCode(
-                version=1,  # Controls size (1-40, 1 is smallest)
+                version=1, 
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,  # Pixels per box
-                border=4,  # Boxes of border
+                box_size=10,  
+                border=4,  
             )
             qr.add_data(qr_data)
             qr.make(fit=True)
@@ -348,7 +327,6 @@ def checkout(request):
             img.save(buffer, format='PNG')
             qr_code_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
             
-            # Save QR code URL to order (optional - if you want to store it)
             # order.qr_code_token = qr_data  # Store the raw data
             order.save()
             
@@ -379,9 +357,6 @@ def checkout(request):
 @api_view(['POST'])
 @permission_classes([IsSeller])
 def verify_qr_code(request):
-    """
-    Seller verifies buyer's QR code
-    """
     qr_data = request.data.get('qr_data')
     
     if not qr_data:
@@ -391,13 +366,11 @@ def verify_qr_code(request):
         )
     
     try:
-        # Parse QR data
         try:
             data = json.loads(qr_data)
             order_id = data.get('order_id')
             order_number = data.get('order_number')
         except (json.JSONDecodeError, AttributeError):
-            # Not JSON, treat as order number
             order_number = qr_data
             order_id = None
         
@@ -442,7 +415,6 @@ def verify_qr_code(request):
 @api_view(['PATCH'])
 @permission_classes([permissions.IsAuthenticated])
 def save_qr_code(request, order_id):
-    """Save QR code image URL after frontend uploads to Cloudinary"""
     serializer = OrderQRCodeSerializer(data=request.data)
     
     if serializer.is_valid():
@@ -466,74 +438,8 @@ def save_qr_code(request, order_id):
 
 
 @api_view(['POST'])
-@permission_classes([IsSeller])
-def verify_qr_code(request):
-    """
-    Seller verifies buyer's QR code
-    """
-    qr_data = request.data.get('qr_data')
-    
-    if not qr_data:
-        return Response(
-            {'error': 'QR code data is required'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    try:
-        import json
-        
-        # Parse QR data
-        try:
-            data = json.loads(qr_data)
-            order_id = data.get('order_id')
-            order_number = data.get('order_number')
-        except (json.JSONDecodeError, AttributeError):
-            # Not JSON, treat as order number
-            order_number = qr_data
-            order_id = None
-        
-        # Find the order
-        if order_id:
-            order = Order.objects.get(id=order_id, seller=request.user)
-        elif order_number:
-            order = Order.objects.get(order_number=order_number, seller=request.user)
-        else:
-            raise Order.DoesNotExist
-        
-        # Check if order is in correct status
-        if order.status not in ['PENDING', 'CONFIRMED']:
-            return Response(
-                {'error': f'This order is already {order.status}. Cannot scan again.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Return order details
-        return Response({
-            'id': order.id,
-            'order_number': order.order_number,
-            'status': order.status,
-            'buyer_name': order.buyer.get_full_name(),
-            'total_amount': str(order.total_amount),
-            'items_count': order.items.count(),
-            'message': 'QR code verified successfully'
-        }, status=status.HTTP_200_OK)
-        
-    except Order.DoesNotExist:
-        return Response(
-            {'error': 'Invalid QR code or order not found for your store'},
-            status=status.HTTP_404_NOT_FOUND
-        )
-    except Exception as e:
-        return Response(
-            {'error': f'Failed to verify QR code: {str(e)}'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-
-@api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def confirm_order(request, order_id):
-    """Seller confirms order after verification"""
     user = request.user
     
     if user.role != 'SELLER':
@@ -546,7 +452,7 @@ def confirm_order(request, order_id):
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
             
-            # Confirm order (stock already reduced at checkout)
+            # Confirm order
             order.confirm_order(user)
             
             return Response(
@@ -572,10 +478,6 @@ def confirm_order(request, order_id):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def complete_order(request, order_id):
-    """
-    Seller completes order
-    Stock was already reduced at checkout, just pay seller now
-    """
     user = request.user
     
     if user.role != 'SELLER':
@@ -588,7 +490,7 @@ def complete_order(request, order_id):
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
             
-            # Complete order (stock already reduced, just transfer earnings)
+            # Complete order
             order.complete_order()
             
             return Response(
@@ -614,10 +516,6 @@ def complete_order(request, order_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_orders(request):
-    """
-    Unified view for orders - works for both buyers and sellers
-    Automatically detects user role and returns appropriate orders
-    """
     user = request.user
     
     # Determine which orders to fetch based on role
@@ -661,17 +559,12 @@ def my_orders(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def seller_orders(request):
-    """
-    Seller views their orders (backward compatibility)
-    Now just redirects to my_orders which handles both roles
-    """
     return my_orders(request)
 
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def order_detail(request, order_id):
-    """View order details"""
     user = request.user
     
     try:
@@ -702,7 +595,6 @@ def order_detail(request, order_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_orders(request):
-    """Admin views all orders"""
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all orders'},

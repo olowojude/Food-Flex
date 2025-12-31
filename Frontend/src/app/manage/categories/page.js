@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Admin - Categories Management Page
- * Save as: frontend/src/app/manage/categories/page.js
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -47,7 +42,6 @@ export default function CategoriesPage() {
       const response = await shopAPI.getCategories();
       setCategories(response.data);
     } catch (error) {
-      console.error('Error fetching categories:', error);
     } finally {
       setLoading(false);
     }
@@ -95,7 +89,6 @@ export default function CategoriesPage() {
       fetchCategories();
       resetForm();
     } catch (error) {
-      console.error('Error saving category:', error);
       const errorData = error.response?.data;
       if (errorData) {
         // Handle both string errors and object errors
@@ -127,7 +120,6 @@ export default function CategoriesPage() {
       alert('Category deleted successfully!');
       fetchCategories();
     } catch (error) {
-      console.error('Error deleting category:', error);
       alert(error.response?.data?.error || 'Failed to delete category');
     } finally {
       setDeleting(null);

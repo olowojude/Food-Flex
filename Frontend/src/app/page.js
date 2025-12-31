@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Optimized Homepage - Final Version
- * Using the new ProductCard component for better design
- */
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -46,7 +42,6 @@ export default function HomePage() {
       });
       setCategories(categoriesRes.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -73,7 +68,6 @@ export default function HomePage() {
         currentPage: nextPage,
       });
     } catch (error) {
-      console.error('Error loading more products:', error);
     } finally {
       setLoadingMore(false);
     }
@@ -83,7 +77,7 @@ export default function HomePage() {
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       {!isAuthenticated && (
-        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 text-white py-16 md:py-20">
+        <div className="bg-linear-to-br from-blue-600 to-indigo-700 text-white py-16 md:py-20">
           <div className="container mx-auto px-4 text-center">
             <h1 className="text-3xl md:text-5xl font-bold mb-4">Welcome to FoodFlex</h1>
             <p className="text-lg md:text-xl mb-8">Get ₦50,000 instant credit. Shop now, pay later!</p>

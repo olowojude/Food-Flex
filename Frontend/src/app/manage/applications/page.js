@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Admin - Seller Applications Page
- * Save as: frontend/src/app/manage/applications/page.js
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -36,7 +31,6 @@ export default function ApplicationsPage() {
   const fetchApplications = async () => {
     try {
       setLoading(true);
-      // Get all buyers who have seller profiles (pending applications)
       const response = await adminAPI.getAllUsers({ role: 'BUYER' });
       const buyers = response.data;
       
@@ -44,7 +38,6 @@ export default function ApplicationsPage() {
       const pending = buyers.filter(user => user.seller_profile);
       setApplications(pending);
     } catch (error) {
-      console.error('Error fetching applications:', error);
     } finally {
       setLoading(false);
     }
@@ -61,7 +54,6 @@ export default function ApplicationsPage() {
       alert(`${userName} has been approved as a seller!`);
       fetchApplications(); // Refresh list
     } catch (error) {
-      console.error('Error approving seller:', error);
       alert(error.response?.data?.error || 'Failed to approve seller');
     } finally {
       setProcessing(null);

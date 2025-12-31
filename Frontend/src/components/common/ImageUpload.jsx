@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Reusable Image Upload Component
- * Save as: frontend/src/components/common/ImageUpload.jsx
- */
-
 import { useState } from 'react';
 import { uploadImage, getOptimizedImageUrl } from '@/lib/cloudinary';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
@@ -159,25 +154,3 @@ export default function ImageUpload({
     </div>
   );
 }
-
-// Usage Example:
-/*
-
-import ImageUpload from '@/components/common/ImageUpload';
-
-function ProductForm() {
-  const [productImage, setProductImage] = useState('');
-
-  return (
-    <ImageUpload
-      label="Product Image"
-      folder="products"
-      currentImage={productImage}
-      onUploadComplete={(url) => setProductImage(url)}
-      maxSize={5}
-      showPreview={true}
-    />
-  );
-}
-
-*/

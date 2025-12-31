@@ -38,13 +38,8 @@ class User(AbstractUser):
         SELLER = 'SELLER', 'Seller'
         ADMIN = 'ADMIN', 'Admin'
     
-    # Use custom manager
     objects = CustomUserManager()
-    
-    # Override email to be unique
     email = models.EmailField(unique=True)
-    
-    # Additional fields
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     profile_image = models.URLField(blank=True, null=True)
@@ -56,7 +51,6 @@ class User(AbstractUser):
     is_verified = models.BooleanField(default=False)
     is_seller_approved = models.BooleanField(default=False)
     
-    # Keep username field but make it case-insensitive
     username = models.CharField(max_length=150, unique=True)
     
     class Meta:
@@ -100,7 +94,6 @@ class SellerProfile(models.Model):
         on_delete=models.CASCADE,
         related_name='seller_profile'
     )
-    # NEW FIELD: Optional store name
     store_name = models.CharField(
         max_length=255, 
         blank=True, 

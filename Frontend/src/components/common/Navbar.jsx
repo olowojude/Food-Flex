@@ -1,8 +1,5 @@
 'use client';
 
-// frontend/src/components/common/Navbar.jsx
-// Save as: frontend/src/components/common/Navbar.jsx (REPLACE)
-
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';

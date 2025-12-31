@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Admin Dashboard - Overview Page (Mobile Optimized)
- * Save as: frontend/src/app/manage/page.js (REPLACE)
- */
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -48,7 +44,6 @@ export default function AdminDashboard() {
     try {
       setLoading(true);
       
-      // Fetch all data in parallel
       const [usersRes, productsRes, ordersRes, creditsRes] = await Promise.all([
         adminAPI.getAllUsers(),
         shopAPI.getProducts(),
@@ -61,7 +56,6 @@ export default function AdminDashboard() {
       const orders = ordersRes.data.results || ordersRes.data;
       const credits = creditsRes.data.results || creditsRes.data;
 
-      // Calculate stats
       const buyers = users.filter(u => u.role === 'BUYER').length;
       const sellers = users.filter(u => u.role === 'SELLER').length;
 
@@ -82,7 +76,6 @@ export default function AdminDashboard() {
         activeCredits: credits.filter(c => c.loan_status === 'ACTIVE').length,
       });
 
-      // Recent activity (last 5 orders)
       setRecentActivity(orders.slice(0, 5));
 
     } catch (error) {
@@ -135,14 +128,14 @@ export default function AdminDashboard() {
           </div>
 
           {/* Django Admin Info Banner */}
-          <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
+          <div className="bg-linear-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3 md:p-4 mb-4 md:mb-6">
             <div className="flex items-start gap-2 md:gap-3">
-              <Shield className="w-4 h-4 md:w-5 md:h-5 text-purple-600 mt-0.5 shrink-0" />
+              <Shield className="w-4 h-4 md:w-5 md:h-5 text-blue-600 mt-0.5 shrink-0" />
               <div>
-                <h3 className="font-semibold text-purple-900 mb-1 text-sm md:text-base">
+                <h3 className="font-semibold text-blue-900 mb-1 text-sm md:text-base">
                   Advanced Administration
                 </h3>
-                <p className="text-xs md:text-sm text-purple-800">
+                <p className="text-xs md:text-sm text-blue-800">
                   For critical operations like managing seller applications, database operations, and advanced configurations, 
                   use the Django Admin panel. Click the button above to access it.
                 </p>
@@ -151,7 +144,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Stats Grid - Mobile: 2 cols, Desktop: 4 cols */}
+        {/* Stats Grid for Mobile (2 cols) Desktop(4 cols) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6 mb-6 md:mb-8">
           {/* Total Users */}
           <Link href="/manage/people">
@@ -257,7 +250,7 @@ export default function AdminDashboard() {
               </p>
             </div>
             <div className="p-3 md:p-4 bg-green-100 rounded-full">
-              <DollarSign className="w-6 h-6 md:w-10 md:h-10 text-green-600" />
+              {/* <DollarSign className="w-6 h-6 md:w-10 md:h-10 text-green-600" /> */}
             </div>
           </div>
         </div>
@@ -348,7 +341,7 @@ export default function AdminDashboard() {
 
           <Link href="/manage/credits">
             <div className="card p-4 md:p-6 hover:shadow-lg transition cursor-pointer text-center sm:col-span-2 lg:col-span-1">
-              <DollarSign className="w-10 h-10 md:w-12 md:h-12 text-green-600 mx-auto mb-2 md:mb-3" />
+              {/* <DollarSign className="w-10 h-10 md:w-12 md:h-12 text-green-600 mx-auto mb-2 md:mb-3" /> */}
               <h3 className="font-semibold text-gray-900 mb-1 md:mb-2 text-sm md:text-base">Credit Management</h3>
               <p className="text-xs md:text-sm text-gray-600">
                 Process repayments and adjust limits

@@ -9,7 +9,7 @@ const api = axios.create({
   },
 });
 
-// Request interceptor - Add auth token to requests
+// Add auth token to requests
 api.interceptors.request.use(
   (config) => {
     const token = Cookies.get('access_token');
@@ -23,7 +23,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor - Handle token refresh
+// Handle token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -64,9 +64,7 @@ api.interceptors.response.use(
   }
 );
 
-// ============================================================================
-// AUTHENTICATION & USER PROFILE
-// ============================================================================
+// AUTHENTICATION
 export const authAPI = {
   register: (data) => api.post('/accounts/register/', data),
   login: (data) => api.post('/accounts/login/', data),
@@ -78,14 +76,12 @@ export const authAPI = {
   changePassword: (data) => api.post('/accounts/profile/password/', data),
   
   // Seller/Business Profile
-  applyForSeller: (data) => api.post('/accounts/profile/business/apply/', data),
+  // applyForSeller: (data) => api.post('/accounts/profile/business/apply/', data),
   getSellerProfile: () => api.get('/accounts/profile/business/'),
   updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
 };
 
-// ============================================================================
 // SHOP - PRODUCTS & CATEGORIES
-// ============================================================================
 export const shopAPI = {
   // Categories
   getCategories: () => api.get('/shop/categories/'),
@@ -111,9 +107,7 @@ export const shopAPI = {
   deleteReview: (reviewId) => api.delete(`/shop/reviews/${reviewId}/delete/`),
 };
 
-// ============================================================================
 // CART
-// ============================================================================
 export const cartAPI = {
   getCart: () => api.get('/orders/cart/'),
   addToCart: (data) => api.post('/orders/cart/add/', data),
@@ -122,9 +116,7 @@ export const cartAPI = {
   clearCart: () => api.delete('/orders/cart/clear/'),
 };
 
-// ============================================================================
 // ORDERS (Unified for Buyers & Sellers)
-// ============================================================================
 export const orderAPI = {
   // Checkout
   checkout: () => api.post('/orders/checkout/'),
@@ -134,16 +126,14 @@ export const orderAPI = {
   getOrderDetail: (orderId) => api.get(`/orders/${orderId}/`),
   saveQRCode: (orderId, data) => api.patch(`/orders/${orderId}/qr-code/`, data),
   
-  // Order Actions (no "seller/" prefix - permissions checked in backend)
+  // Order Actions (permissions checked in backend)
   verifyQRCode: (data) => api.post('/orders/verify-qr/', data),
   confirmOrder: (orderId) => api.post(`/orders/${orderId}/confirm/`),
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
   saveQRCode: (orderId, data) => api.patch(`/orders/${orderId}/qr-code/`, data),
 };
 
-// ============================================================================
 // CREDITS
-// ============================================================================
 export const creditAPI = {
   // User Credit
   getMyCreditAccount: () => api.get('/credits/account/'),
@@ -159,9 +149,7 @@ export const creditAPI = {
   getCreditLimitHistory: (params) => api.get('/credits/limit-history/', { params }),
 };
 
-// ============================================================================
 // ADMIN/MANAGEMENT
-// ============================================================================
 export const adminAPI = {
   // User Management
   getAllUsers: (params) => api.get('/accounts/users/', { params }),

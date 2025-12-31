@@ -3,10 +3,7 @@
 import { useEffect } from 'react';
 import { CheckCircle, XCircle, AlertCircle, X } from 'lucide-react';
 
-/**
- * Toast Notification Component
- * Types: success, error, warning
- */
+
 export default function Toast({ message, type = 'success', onClose, duration = 3000 }) {
   useEffect(() => {
     if (duration > 0) {
@@ -49,13 +46,13 @@ export default function Toast({ message, type = 'success', onClose, duration = 3
     <div className={`fixed top-4 right-4 z-50 max-w-md w-full animate-slide-in`}>
       <div className={`${style.bg} border ${style.border} rounded-lg shadow-lg p-4`}>
         <div className="flex items-start gap-3">
-          <Icon className={`w-5 h-5 ${style.iconColor} flex-shrink-0 mt-0.5`} />
+          <Icon className={`w-5 h-5 ${style.iconColor} shrink-0 mt-0.5`} />
           <p className={`flex-1 text-sm font-medium ${style.text}`}>
             {message}
           </p>
           <button
             onClick={onClose}
-            className={`${style.text} hover:opacity-70 transition flex-shrink-0`}
+            className={`${style.text} hover:opacity-70 transition shrink-0`}
           >
             <X className="w-4 h-4" />
           </button>

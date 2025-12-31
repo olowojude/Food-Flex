@@ -14,15 +14,11 @@ from .serializers import (
 from credits.models import CreditAccount
 from orders.models import Cart
 from accounts.permissions import IsAdmin, IsSeller, IsBuyer
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
-from rest_framework import status
-from accounts.permissions import IsAdmin
-from .models import User
-from .serializers import UserProfileSerializer
+from rest_framework.permissions import IsAuthenticated
 
 
-# Login - FIXED VERSION
+
+# Login page
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def login(request):
@@ -35,35 +31,27 @@ def login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Try to find user by email or username (case-insensitive)
     user = None
     try:
-        # Try email first
         user = User.objects.get(email__iexact=email_or_username)
     except User.DoesNotExist:
-        # Try username
         try:
             user = User.objects.get(username__iexact=email_or_username)
         except User.DoesNotExist:
             pass
     
-    # If user found, check password
     if user:
-        # Authenticate with username
         authenticated_user = authenticate(username=user.username, password=password)
         
         if authenticated_user:
-            # Check if user is active
             if not authenticated_user.is_active:
                 return Response(
                     {'error': 'Your account has been disabled. Please contact support.'},
                     status=status.HTTP_401_UNAUTHORIZED
                 )
             
-            # Generate JWT tokens with custom claims
             refresh = RefreshToken.for_user(authenticated_user)
             
-            # ✅ ADD CUSTOM CLAIMS TO TOKEN
             refresh['email'] = authenticated_user.email
             refresh['role'] = authenticated_user.role  # ← THIS WAS MISSING!
             refresh['first_name'] = authenticated_user.first_name
@@ -84,7 +72,7 @@ def login(request):
     )
 
 
-# Register - ALSO FIX THIS ONE
+# Register page
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def register(request):
@@ -97,15 +85,12 @@ def register(request):
     serializer = UserRegistrationSerializer(data=data)
     
     if serializer.is_valid():
-        # Create user with BUYER role
         user = serializer.save()
         user.role = 'BUYER'  # Explicitly set to BUYER
         user.save()
         
-        # Generate tokens with custom claims
         refresh = RefreshToken.for_user(user)
         
-        # ✅ ADD CUSTOM CLAIMS TO TOKEN
         refresh['email'] = user.email
         refresh['role'] = user.role  # ← ADD THIS!
         refresh['first_name'] = user.first_name
@@ -190,42 +175,6 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# @api_view(['POST'])
-# @permission_classes([permissions.IsAuthenticated])
-# def apply_for_seller(request):
-#     #Buyer applies to become a seller
-#     user = request.user
-    
-#     # Check if user is already a seller
-#     if user.role == 'SELLER':
-#         return Response(
-#             {'error': 'You are already a seller'},
-#             status=status.HTTP_400_BAD_REQUEST
-#         )
-    
-#     # Check if already applied
-#     if hasattr(user, 'seller_profile'):
-#         return Response(
-#             {'error': 'You have already applied. Waiting for approval.'},
-#             status=status.HTTP_400_BAD_REQUEST
-#         )
-    
-#     serializer = SellerApplicationSerializer(data=request.data)
-    
-#     if serializer.is_valid():
-#         with transaction.atomic():
-#             # Create seller profile (pending approval)
-#             SellerProfile.objects.create(
-#                 user=user,
-#                 **serializer.validated_data
-#             )
-            
-#             return Response(
-#                 {'message': 'Application submitted successfully. Awaiting admin approval.'},
-#                 status=status.HTTP_201_CREATED
-#             )
-    
-#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 #View seller profile
@@ -269,52 +218,9 @@ def update_seller_profile(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# #Admin approves seller application
-# @api_view(['POST'])
-# @permission_classes([IsAdmin])
-# def approve_seller(request, user_id):
-#     try:
-#         user = User.objects.get(id=user_id)
-        
-#         if not hasattr(user, 'seller_profile'):
-#             return Response(
-#                 {'error': 'User has not applied to be a seller'},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-        
-#         if user.role == 'SELLER':
-#             return Response(
-#                 {'error': 'User is already approved as a seller'},
-#                 status=status.HTTP_400_BAD_REQUEST
-#             )
-        
-#         with transaction.atomic():
-#             # Convert to seller
-#             user.role = 'SELLER'
-#             user.save()
-            
-#             # Disable credit account (sellers don't use credits)
-#             if hasattr(user, 'credit_account'):
-#                 credit_account = user.credit_account
-#                 credit_account.loan_status = 'SUSPENDED'
-#                 credit_account.save()
-        
-#         return Response(
-#             {
-#                 'message': f'{user.get_full_name()} approved as seller',
-#                 'user': UserProfileSerializer(user).data
-#             },
-#             status=status.HTTP_200_OK
-#         )
-        
-#     except User.DoesNotExist:
-#         return Response(
-#             {'error': 'User not found'},
-#             status=status.HTTP_404_NOT_FOUND
-#         )
 
 
-#Lists all users with optional role filter in admin page
+#Lists all users in admin page
 @api_view(['GET'])
 @permission_classes([IsAdmin])
 def list_users(request):
@@ -347,14 +253,10 @@ def user_detail(request, user_id):
 @api_view(['PATCH', 'PUT'])
 @permission_classes([IsAdmin])
 def update_user(request, user_id):
-    """Admin updates any user's information"""
     try:
-        user = User.objects.get(id=user_id)
-        
-        # Get data from request
+        user = User.objects.get(id=user_id)        
         data = request.data
         
-        # Update basic fields
         if 'first_name' in data:
             user.first_name = data['first_name']
         if 'last_name' in data:
@@ -395,7 +297,6 @@ def update_user(request, user_id):
 @api_view(['DELETE'])
 @permission_classes([IsAdmin])
 def delete_user(request, user_id):
-    """Admin deletes a user"""
     try:
         user = User.objects.get(id=user_id)
         
@@ -406,7 +307,7 @@ def delete_user(request, user_id):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Prevent deleting other admins (optional safety measure)
+        # Prevent deleting other admins
         if user.role == 'ADMIN' and not request.user.is_superuser:
             return Response(
                 {'error': 'Only superusers can delete admin accounts'},
@@ -426,76 +327,3 @@ def delete_user(request, user_id):
             {'error': 'User not found'},
             status=status.HTTP_404_NOT_FOUND
         )
-
-
-
-# Google OAuth (placeholder - not implemented)
-@api_view(['POST'])
-@permission_classes([permissions.AllowAny])
-def google_login(request):
-    """Google OAuth login - Not implemented yet"""
-    return Response(
-        {'error': 'Google login not implemented yet'},
-        status=status.HTTP_501_NOT_IMPLEMENTED
-    )
-
-
-# Add this to accounts/views.py (at the end)
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def debug_user_status(request):
-    """
-    Debug endpoint to check user authentication and permissions.
-    TEMPORARY - Remove in production!
-    """
-    user = request.user
-    
-    debug_info = {
-        'authenticated': True,
-        'user_id': user.id,
-        'email': user.email,
-        'first_name': user.first_name,
-        'last_name': user.last_name,
-        'role': user.role,
-        'is_active': user.is_active,
-        'is_superuser': user.is_superuser,
-        'is_staff': user.is_staff,
-    }
-    
-    # Check seller profile
-    try:
-        seller_profile = user.seller_profile
-        debug_info['seller_profile'] = {
-            'exists': True,
-            'business_name': seller_profile.business_name,
-            'is_approved': seller_profile.is_approved,
-            'phone_number': seller_profile.phone_number,
-            'address': seller_profile.address,
-        }
-    except AttributeError:
-        debug_info['seller_profile'] = {
-            'exists': False,
-            'message': 'No seller profile found'
-        }
-    
-    # Check credit account
-    try:
-        credit_account = user.credit_account
-        debug_info['credit_account'] = {
-            'exists': True,
-            'balance': str(credit_account.current_balance),
-            'limit': str(credit_account.credit_limit),
-        }
-    except AttributeError:
-        debug_info['credit_account'] = {
-            'exists': False,
-            'message': 'No credit account found'
-        }
-    
-    return Response(debug_info, status=status.HTTP_200_OK)

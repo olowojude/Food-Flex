@@ -86,5 +86,4 @@ class ProductReviewAdmin(admin.ModelAdmin):
     buyer_name.short_description = 'Buyer'
     
     def has_add_permission(self, request):
-        # Reviews should only be created through API, not admin
         return False

@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Fixed CartContext - Shows unique items count (like Jumia)
- * Save as: frontend/src/context/CartContext.jsx (REPLACE)
- */
-
 import { createContext, useContext, useState, useEffect } from 'react';
 import { cartAPI } from '@/lib/api';
 import { useAuth } from './AuthContext';
@@ -106,7 +101,6 @@ export function CartProvider({ children }) {
     updateCartItem,
     removeFromCart,
     clearCart,
-    // ✅ FIXED: Show number of unique items (like Jumia), not total quantity
     itemCount: cart?.items?.length || 0,  // Changed from cart?.total_items
     subtotal: cart?.subtotal || 0,
   };

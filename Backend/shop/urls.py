@@ -18,7 +18,7 @@ urlpatterns = [
     path('products/<int:pk>/update/', views.product_update, name='product_update'),
     path('products/<int:pk>/delete/', views.product_delete, name='product_delete'),
     
-    # My Products (for sellers - permissions check in view)
+    # View products for sellers
     path('inventory/', views.my_products, name='my_products'),  # Changed from "my-products"
     
     # Product Reviews

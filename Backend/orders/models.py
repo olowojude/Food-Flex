@@ -9,7 +9,6 @@ import base64
 
 
 class Cart(models.Model):
-    """Shopping cart for buyers"""
     user = models.OneToOneField(
         User,
         on_delete=models.CASCADE,
@@ -28,21 +27,17 @@ class Cart(models.Model):
     
     @property
     def total_items(self):
-        """Total number of items in cart"""
         return sum(item.quantity for item in self.items.all())
     
     @property
     def subtotal(self):
-        """Calculate cart subtotal"""
         return sum(item.total_price for item in self.items.all())
     
     def clear(self):
-        """Clear all items from cart"""
         self.items.all().delete()
 
 
 class CartItem(models.Model):
-    """Individual items in shopping cart"""
     cart = models.ForeignKey(
         Cart,
         on_delete=models.CASCADE,
@@ -72,11 +67,9 @@ class CartItem(models.Model):
     
     @property
     def total_price(self):
-        """Calculate total price for this cart item"""
         return self.product.price * self.quantity
     
     def update_quantity(self, quantity):
-        """Update quantity and validate stock"""
         if quantity > self.product.stock_quantity:
             raise ValueError(
                 f"Insufficient stock. Available: {self.product.stock_quantity}"
@@ -86,14 +79,12 @@ class CartItem(models.Model):
 
 
 class Order(models.Model):
-    """Orders placed by buyers"""
     class OrderStatus(models.TextChoices):
         PENDING = 'PENDING', 'Pending'
         CONFIRMED = 'CONFIRMED', 'Confirmed'
         COMPLETED = 'COMPLETED', 'Completed'
         CANCELLED = 'CANCELLED', 'Cancelled'
     
-    # Generate unique order number
     order_number = models.CharField(
         max_length=20,
         unique=True,
@@ -127,11 +118,9 @@ class Order(models.Model):
         default=OrderStatus.PENDING
     )
     
-    # QR Code
     qr_code_token = models.TextField(blank=True, null=True)
     qr_code_image = models.URLField(blank=True, null=True)
     
-    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -161,20 +150,16 @@ class Order(models.Model):
     
     @staticmethod
     def generate_order_number():
-        """Generate unique order number"""
         prefix = 'FF'
         random_string = get_random_string(12, allowed_chars='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ')
         return f"{prefix}{random_string}"
     
     @staticmethod
     def generate_qr_token():
-        """Generate secure QR code token"""
         return get_random_string(64)
     
     def generate_qr_code(self):
-        """Generate QR code image as base64 string"""
         try:
-            # Create QR code
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -182,20 +167,16 @@ class Order(models.Model):
                 border=4,
             )
             
-            # QR data includes order number and token for security
             qr_data = f"FOODFLEX_ORDER:{self.order_number}:{self.qr_code_token}"
             qr.add_data(qr_data)
             qr.make(fit=True)
             
-            # Generate image
             img = qr.make_image(fill_color="black", back_color="white")
             
-            # Convert to base64 for frontend to upload to Cloudinary
             buffer = BytesIO()
             img.save(buffer, format='PNG')
             buffer.seek(0)
             
-            # Return base64 string - frontend will upload this to Cloudinary
             img_base64 = base64.b64encode(buffer.getvalue()).decode()
             return f"data:image/png;base64,{img_base64}"
             
@@ -203,7 +184,6 @@ class Order(models.Model):
             raise Exception(f"QR code generation failed: {str(e)}")
     
     def confirm_order(self, confirmed_by_seller):
-        """Seller confirms order after scanning QR (stock already reduced at checkout)"""
         from django.utils import timezone
         
         if self.status != self.OrderStatus.PENDING:
@@ -217,52 +197,37 @@ class Order(models.Model):
         self.save()
     
     def complete_order(self):
-        """
-        Complete order and transfer earnings to seller
-        Stock was ALREADY reduced at checkout, so no stock manipulation here
-        """
         from django.utils import timezone
         
         if self.status != self.OrderStatus.CONFIRMED:
             raise ValueError(f"Cannot complete order with status: {self.status}")
         
-        # Mark as completed
         self.status = self.OrderStatus.COMPLETED
         self.completed_at = timezone.now()
         self.save()
         
-        # Stock was already reduced at checkout, so we don't touch it here
-        # Just transfer earnings to seller
         seller_profile = self.seller.seller_profile
         seller_profile.add_earnings(self.total_amount)
         seller_profile.increment_order_count()
     
     def cancel_order(self, reason=''):
-        """
-        Cancel order and refund credit to buyer
-        ✅ RESTORE STOCK because it was reduced at checkout
-        """
         if self.status in [self.OrderStatus.COMPLETED, self.OrderStatus.CANCELLED]:
             raise ValueError(f"Cannot cancel order with status: {self.status}")
         
-        # ✅ RESTORE STOCK - Add back the quantities that were reduced at checkout
         for item in self.items.all():
             if item.product:  # Check product still exists
                 item.product.stock_quantity += item.quantity
                 item.product.save(update_fields=['stock_quantity'])
         
-        # Refund credit to buyer
         credit_account = self.buyer.credit_account
         credit_account.credit_balance += self.total_amount
         credit_account.total_credit_used -= self.total_amount
         
-        # If loan was exhausted, make it active again
         if credit_account.loan_status == 'EXHAUSTED':
             credit_account.loan_status = 'ACTIVE'
         
         credit_account.save()
         
-        # Log refund transaction
         from credits.models import CreditTransaction
         CreditTransaction.objects.create(
             credit_account=credit_account,
@@ -274,7 +239,6 @@ class Order(models.Model):
             reference=self.order_number
         )
         
-        # Update order status
         self.status = self.OrderStatus.CANCELLED
         if reason:
             self.notes = f"Cancelled: {reason}"
@@ -282,7 +246,6 @@ class Order(models.Model):
 
 
 class OrderItem(models.Model):
-    """Individual items in an order"""
     order = models.ForeignKey(
         Order,
         on_delete=models.CASCADE,
@@ -314,11 +277,9 @@ class OrderItem(models.Model):
         return f"{self.product_name} x{self.quantity} (Order: {self.order.order_number})"
     
     def save(self, *args, **kwargs):
-        # Store product details at time of order
         if self.product:
             self.product_name = self.product.name
             self.product_price = self.product.price
         
-        # Calculate subtotal
         self.subtotal = self.product_price * self.quantity
         super().save(*args, **kwargs)

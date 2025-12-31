@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Loan Repayment Modal with On-Time Bonus
- * Save as: frontend/src/components/common/RepaymentModal.jsx
- */
 
 import { useState } from 'react';
 import { X, CreditCard, AlertCircle, CheckCircle, Gift, TrendingUp } from 'lucide-react';
@@ -69,7 +65,6 @@ export default function RepaymentModal({
     setProcessing(true);
 
     try {
-      // Call parent function to handle actual repayment
       await onRepaymentSuccess(repaymentAmount);
     } catch (err) {
       setError(err.message || 'Repayment failed. Please try again.');
@@ -81,7 +76,7 @@ export default function RepaymentModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl">
         {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-emerald-600 p-6 text-white">
+        <div className="bg-linear-to-r from-green-600 to-emerald-600 p-6 text-white">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-2xl font-bold">Repay Your Loan</h2>
             <button
@@ -99,7 +94,7 @@ export default function RepaymentModal({
         {/* Content */}
         <div className="p-6 space-y-6">
           {/* Current Balance Info */}
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+          <div className="bg-linear-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm text-gray-600">Outstanding Balance</span>
               <CreditCard className="w-5 h-5 text-blue-600" />
@@ -132,7 +127,7 @@ export default function RepaymentModal({
 
           {/* Bonus Eligibility Banner */}
           {isEligibleForBonus && outstandingBalance > 0 && (
-            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-4">
+            <div className="bg-linear-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl p-4">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-purple-100 rounded-full">
                   <Gift className="w-6 h-6 text-purple-600" />

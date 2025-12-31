@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Admin - Credits Management Page
- * Save as: frontend/src/app/manage/credits/page.js
- */
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -71,7 +66,6 @@ export default function AdminCreditsPage() {
         totalOutstanding,
       });
     } catch (error) {
-      console.error('Error fetching accounts:', error);
     } finally {
       setLoading(false);
     }
@@ -107,7 +101,6 @@ export default function AdminCreditsPage() {
       setSelectedAccount(null);
       fetchAccounts();
     } catch (error) {
-      console.error('Error processing repayment:', error);
       alert(error.response?.data?.error || 'Failed to process repayment');
     } finally {
       setProcessing(false);
@@ -144,7 +137,6 @@ export default function AdminCreditsPage() {
       setSelectedAccount(null);
       fetchAccounts();
     } catch (error) {
-      console.error('Error increasing limit:', error);
       alert(error.response?.data?.error || 'Failed to increase limit');
     } finally {
       setProcessing(false);
@@ -376,7 +368,7 @@ export default function AdminCreditsPage() {
                         disabled={outstanding <= 0}
                         className="text-sm whitespace-nowrap"
                       >
-                        <DollarSign className="w-4 h-4 mr-1" />
+                        {/* <DollarSign className="w-4 h-4 mr-1" /> */}
                         Repayment
                       </Button>
                       <Button

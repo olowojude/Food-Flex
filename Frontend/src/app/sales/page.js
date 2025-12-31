@@ -54,7 +54,6 @@ export default function SalesPage() {
       setOrders(orderList);
       calculateStats(orderList);
     } catch (error) {
-      console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || 'Failed to load orders');
     } finally {
       setLoading(false);
@@ -82,7 +81,6 @@ export default function SalesPage() {
   };
 
   const handleScanSuccess = async ({ orderData, qrData }) => {
-    console.log('QR Scanned:', orderData);
     
     setShowScanner(false);
     setProcessing(true);
@@ -118,18 +116,15 @@ export default function SalesPage() {
       
       if (response.data.id) {
         // ✅ Success - redirect to order detail with scan flag
-        console.log('✅ QR Verified! Redirecting to order details...');
         router.push(`/orders/${response.data.id}?scan=true`);
       }
     } catch (error) {
-      console.error('QR verification error:', error);
       alert(error.response?.data?.error || error.message || 'Invalid QR code. Please try again.');
       setProcessing(false);
     }
   };
 
   const handleScanError = (error) => {
-    console.error('Scan error:', error);
     setShowScanner(false);
     setProcessing(false);
   };
@@ -142,7 +137,6 @@ export default function SalesPage() {
       alert('✅ Order completed successfully!');
       fetchOrders(); // Refresh orders
     } catch (error) {
-      console.error('Error completing order:', error);
       alert(error.response?.data?.error || 'Failed to complete order');
     }
   };
@@ -264,7 +258,7 @@ export default function SalesPage() {
           <div className="card p-4 bg-green-50">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-gray-600">Revenue</p>
-              <DollarSign className="w-5 h-5 text-green-600" />
+              {/* <DollarSign className="w-5 h-5 text-green-600" /> */}
             </div>
             <p className="text-xl font-bold text-green-600">
               ₦{stats.totalRevenue.toLocaleString()}
@@ -390,7 +384,7 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                          ⚠️ Stock reserved. Scan buyer's QR code to confirm.
+                          Scan buyer's QR code to confirm.
                         </p>
                       </div>
                     )}

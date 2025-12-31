@@ -1,8 +1,3 @@
-/**
- * Search Utility with Debounce
- * Save as: frontend/src/lib/searchUtils.js
- */
-
 import { useEffect, useState, useRef } from 'react';
 
 /**

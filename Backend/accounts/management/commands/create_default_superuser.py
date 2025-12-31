@@ -1,4 +1,3 @@
-# Backend/accounts/management/commands/create_default_superuser.py
 from django.core.management.base import BaseCommand
 from accounts.models import User
 import os
@@ -12,7 +11,6 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('Superuser already exists. Skipping...'))
             return
 
-        # Get credentials from environment variables
         email = os.environ.get('DJANGO_SUPERUSER_EMAIL')
         password = os.environ.get('DJANGO_SUPERUSER_PASSWORD')
         username = os.environ.get('DJANGO_SUPERUSER_USERNAME')

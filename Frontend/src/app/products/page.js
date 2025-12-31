@@ -1,9 +1,5 @@
 'use client';
 
-/**
- * Products Page - Complete Single File Version
- * Save as: frontend/src/app/products/page.js (REPLACE ENTIRE FILE)
- */
 
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -12,7 +8,6 @@ import ProductCard from '@/components/common/ProductCard';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Internal component that uses useSearchParams
 function ProductsContent() {
   const searchParams = useSearchParams();
   const [products, setProducts] = useState([]);
@@ -50,7 +45,6 @@ function ProductsContent() {
       const response = await shopAPI.getCategories();
       setCategories(response.data);
     } catch (error) {
-      console.error('Error fetching categories:', error);
     }
   };
 
@@ -83,7 +77,6 @@ function ProductsContent() {
         totalPages,
       });
     } catch (error) {
-      console.error('Error fetching products:', error);
     } finally {
       setLoading(false);
     }
@@ -336,7 +329,6 @@ function ProductsContent() {
   );
 }
 
-// Main export with Suspense wrapper
 export default function ProductsPage() {
   return (
     <Suspense fallback={
