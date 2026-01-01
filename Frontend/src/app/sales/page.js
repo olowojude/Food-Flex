@@ -15,7 +15,7 @@ import {
 
 export default function SalesPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isSeller } = useAuth();
+  const { user, isAuthenticated, isLoading, isSeller } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -34,14 +34,14 @@ export default function SalesPage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/login');
-    } else if (!isSeller) {
+    } else if (!isLoading && !isSeller) {
       router.push('/');
-    } else {
+    } else if (isAuthenticated && isSeller) {
       fetchOrders();
     }
-  }, [isAuthenticated, isSeller]);
+  }, [isAuthenticated, isLoading, isSeller, router]);
 
   const fetchOrders = async () => {
     try {
@@ -100,7 +100,7 @@ export default function SalesPage() {
       );
 
       if (!order) {
-        alert('❌ This QR code does not match any of your orders!');
+        alert('This QR code does not match any of your orders!');
         setProcessing(false);
         return;
       }
@@ -172,6 +172,14 @@ export default function SalesPage() {
       default: return <Package className="w-4 h-4" />;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !isSeller) return null;
 

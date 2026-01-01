@@ -20,7 +20,7 @@ import {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { user, isAuthenticated, isBuyer, updateUser } = useAuth();
+  const { user, isAuthenticated, isLoading, isBuyer, updateUser } = useAuth();
   const fileInputRef = useRef(null);
   
   const [creditAccount, setCreditAccount] = useState(null);
@@ -41,9 +41,9 @@ export default function ProfilePage() {
   });
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isLoading && !isAuthenticated) {
       router.push('/login');
-    } else {
+    } else if (isAuthenticated) {
       fetchData();
       setFormData({
         first_name: user?.first_name || '',
@@ -52,7 +52,7 @@ export default function ProfilePage() {
         profile_image: user?.profile_image || '',
       });
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, isLoading, user, router]);
 
   const fetchData = async () => {
     try {
@@ -157,6 +157,14 @@ export default function ProfilePage() {
       throw new Error(error.response?.data?.error || 'Repayment failed. Please try again.');
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) return null;
   

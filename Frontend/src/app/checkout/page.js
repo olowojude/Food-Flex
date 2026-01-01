@@ -12,22 +12,22 @@ import { CreditCard, ShoppingBag, AlertCircle, CheckCircle } from 'lucide-react'
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isBuyer } = useAuth();
+  const { user, isAuthenticated, isLoading, isBuyer } = useAuth();
   const { cart, loading: cartLoading, fetchCart } = useCart();
   const [creditAccount, setCreditAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    } else if (!isBuyer) {
-      router.push('/');
-    } else {
-      fetchCheckoutData();
-    }
-  }, [isAuthenticated, isBuyer]);
+useEffect(() => {
+  if (!isLoading && !isAuthenticated) {
+    router.push('/login');
+  } else if (!isLoading && !isBuyer) {
+    router.push('/');
+  } else if (isAuthenticated && isBuyer) {
+    fetchCheckoutData();
+  }
+}, [isAuthenticated, isLoading, isBuyer, router]);
 
   const fetchCheckoutData = async () => {
     try {
@@ -62,6 +62,14 @@ export default function CheckoutPage() {
       setProcessing(false);
     }
   };
+
+  if (isLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <LoadingSpinner size="xl" />
+    </div>
+  );
+}
 
   if (!isAuthenticated || !isBuyer) {
     return null;

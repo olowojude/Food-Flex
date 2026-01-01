@@ -15,7 +15,7 @@ import Link from 'next/link';
 
 export default function InventoryPage() {
   const router = useRouter();
-  const { isAuthenticated, isSeller } = useAuth();
+    const { isAuthenticated, isLoading, isSeller } = useAuth();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,15 +25,15 @@ export default function InventoryPage() {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   const [toast, setToast] = useState(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    } else if (!isSeller) {
-      router.push('/');
-    } else {
-      fetchProducts();
-    }
-  }, [isAuthenticated, isSeller]);
+useEffect(() => {
+  if (!isLoading && !isAuthenticated) {
+    router.push('/login');
+  } else if (!isLoading && !isSeller) {
+    router.push('/');
+  } else if (isAuthenticated && isSeller) {
+    fetchProducts();
+  }
+}, [isAuthenticated, isLoading, isSeller, router]);
 
   // Auto-refresh when page gains focus
   useEffect(() => {
@@ -144,6 +144,14 @@ export default function InventoryPage() {
       );
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated || !isSeller) return null;
 

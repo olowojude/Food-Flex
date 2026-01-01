@@ -10,20 +10,22 @@ import { Package, Calendar, CreditCard, Eye, Filter } from 'lucide-react';
 
 export default function OrdersPage() {
   const router = useRouter();
-  const { isAuthenticated, isBuyer } = useAuth();
+  const { isAuthenticated, isLoading, isBuyer } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState(''); // ALL, PENDING, CONFIRMED, COMPLETED
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    } else if (!isBuyer) {
-      router.push('/');
-    } else {
-      fetchOrders();
-    }
-  }, [isAuthenticated, isBuyer, filter]);
+  if (!isLoading && !isAuthenticated) {
+    router.push('/login');
+  } else if (!isLoading && !isBuyer) {
+    router.push('/');
+  } else if (isAuthenticated && isBuyer) {
+    fetchOrders();
+  }
+}, [isAuthenticated, isLoading, isBuyer, filter, router]);
+
+
 
   const fetchOrders = async () => {
     try {
@@ -46,6 +48,14 @@ export default function OrdersPage() {
     };
     return badges[status] || 'bg-gray-100 text-gray-800';
   };
+
+  if (isLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <LoadingSpinner size="xl" />
+    </div>
+  );
+}
 
   if (!isAuthenticated || !isBuyer) {
     return null;

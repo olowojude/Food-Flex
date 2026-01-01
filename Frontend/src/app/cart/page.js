@@ -11,17 +11,17 @@ import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from 'lucide-react';
 
 export default function CartPage() {
   const router = useRouter();
-  const { isAuthenticated, isBuyer } = useAuth();
+  const { isAuthenticated, isLoading, isBuyer } = useAuth();
   const { cart, loading, updateCartItem, removeFromCart, clearCart } = useCart();
   const [updatingItems, setUpdatingItems] = useState({});
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-    } else if (!isBuyer) {
-      router.push('/');
-    }
-  }, [isAuthenticated, isBuyer]);
+useEffect(() => {
+  if (!isLoading && !isAuthenticated) {
+    router.push('/login');
+  } else if (!isLoading && !isBuyer) {
+    router.push('/');
+  }
+}, [isAuthenticated, isLoading, isBuyer, router]);
 
   const handleUpdateQuantity = async (itemId, currentQuantity, change) => {
     const newQuantity = currentQuantity + change;
@@ -43,6 +43,14 @@ export default function CartPage() {
       await clearCart();
     }
   };
+
+  if (isLoading) {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <LoadingSpinner size="xl" />
+    </div>
+  );
+}
 
   if (!isAuthenticated || !isBuyer) {
     return null;

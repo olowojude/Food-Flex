@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * Fixed Authentication Context
+ * Fixed Authentication Context with Proper Loading State
  * Save as: frontend/src/context/AuthContext.jsx (REPLACE)
  */
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import Cookies from 'js-cookie';
 import { authAPI } from '@/lib/api';
 
@@ -14,20 +14,34 @@ const AuthContext = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // IMPORTANT: Starts as true
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     // Check if user is logged in on mount
-    const storedUser = Cookies.get('user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (error) {
-        Cookies.remove('user');
+    const initAuth = async () => {
+      const storedUser = Cookies.get('user');
+      const accessToken = Cookies.get('access_token');
+      
+      if (storedUser && accessToken) {
+        try {
+          const userData = JSON.parse(storedUser);
+          setUser(userData);
+        } catch (error) {
+          console.error('Error parsing user from cookies:', error);
+          // Clear invalid cookies
+          Cookies.remove('user');
+          Cookies.remove('access_token');
+          Cookies.remove('refresh_token');
+        }
       }
-    }
-    setLoading(false);
+      
+      // IMPORTANT: Set loading to false after checking
+      setLoading(false);
+    };
+
+    initAuth();
   }, []);
 
   const login = async (email, password) => {
@@ -48,9 +62,19 @@ export function AuthProvider({ children }) {
       Cookies.set('user', JSON.stringify(userData), { expires: 7 });
 
       setUser(userData);
-      router.push('/');
+      
+      // Redirect based on role
+      if (userData.role === 'SELLER') {
+        router.push('/inventory');
+      } else if (userData.role === 'ADMIN') {
+        router.push('/manage');
+      } else {
+        router.push('/');
+      }
+      
       return { success: true };
     } catch (error) {
+      console.error('Login error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Login failed',
@@ -72,6 +96,7 @@ export function AuthProvider({ children }) {
       router.push('/');
       return { success: true };
     } catch (error) {
+      console.error('Registration error:', error);
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data || 'Registration failed',
@@ -80,10 +105,13 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    // Clear all auth data
     Cookies.remove('access_token');
     Cookies.remove('refresh_token');
     Cookies.remove('user');
     setUser(null);
+    
+    // Redirect to login
     router.push('/login');
   };
 
@@ -97,6 +125,7 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
+      console.error('Update error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Update failed',
@@ -114,13 +143,19 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
+      console.error('Refresh user error:', error);
+      // If refresh fails, user might need to re-login
+      if (error.response?.status === 401) {
+        logout();
+      }
       return { success: false };
     }
   };
 
   const value = {
     user,
-    loading,
+    loading, // IMPORTANT: Expose loading state
+    isLoading: loading, // Alias for convenience
     isAuthenticated: !!user,
     isBuyer: user?.role === 'BUYER',
     isSeller: user?.role === 'SELLER',
