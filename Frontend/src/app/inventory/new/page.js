@@ -156,7 +156,6 @@ export default function CreateProductPage() {
       }, 1500);
       
     } catch (error) {
-      console.error('Error creating product:', error);
       const errorData = error.response?.data;
       
       if (errorData) {

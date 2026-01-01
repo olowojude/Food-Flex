@@ -27,7 +27,6 @@ export function CartProvider({ children }) {
       const response = await cartAPI.getCart();
       setCart(response.data);
     } catch (error) {
-      console.error('Error fetching cart:', error);
     } finally {
       setLoading(false);
     }
@@ -40,7 +39,6 @@ export function CartProvider({ children }) {
       setCart(response.data.cart);
       return { success: true, message: 'Product added to cart' };
     } catch (error) {
-      console.error('Error adding to cart:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to add product to cart',
@@ -55,7 +53,6 @@ export function CartProvider({ children }) {
       setCart(response.data.cart);
       return { success: true, message: 'Cart updated' };
     } catch (error) {
-      console.error('Error updating cart:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to update cart',
@@ -70,7 +67,6 @@ export function CartProvider({ children }) {
       setCart(response.data.cart);
       return { success: true, message: 'Item removed from cart' };
     } catch (error) {
-      console.error('Error removing from cart:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to remove item',
@@ -85,7 +81,6 @@ export function CartProvider({ children }) {
       await fetchCart();
       return { success: true, message: 'Cart cleared' };
     } catch (error) {
-      console.error('Error clearing cart:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Failed to clear cart',

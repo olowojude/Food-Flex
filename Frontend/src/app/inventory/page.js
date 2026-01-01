@@ -114,7 +114,6 @@ export default function InventoryPage() {
       setProducts(prev => prev.filter(p => p.id !== productId));
       showToast('Product deleted successfully', 'success');
     } catch (error) {
-      console.error('Error deleting product:', error);
       showToast('Failed to delete product. It may be part of existing orders.', 'error');
     } finally {
       setDeleting(null);

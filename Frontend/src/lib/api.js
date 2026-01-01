@@ -76,7 +76,6 @@ export const authAPI = {
   changePassword: (data) => api.post('/accounts/profile/password/', data),
   
   // Seller/Business Profile
-  // applyForSeller: (data) => api.post('/accounts/profile/business/apply/', data),
   getSellerProfile: () => api.get('/accounts/profile/business/'),
   updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
 };
@@ -116,21 +115,25 @@ export const cartAPI = {
   clearCart: () => api.delete('/orders/cart/clear/'),
 };
 
-// ORDERS (Unified for Buyers & Sellers)
+// ORDERS for Buyers & Sellers
 export const orderAPI = {
   // Checkout
   checkout: () => api.post('/orders/checkout/'),
   
-  // Orders (same endpoint for buyers and sellers - backend handles permissions)
+  // Orders (same endpoint for buyers and sellers, backend handles permissions)
   getMyOrders: (params) => api.get('/orders/', { params }),
   getOrderDetail: (orderId) => api.get(`/orders/${orderId}/`),
+  
+  // QR Code Management
   saveQRCode: (orderId, data) => api.patch(`/orders/${orderId}/qr-code/`, data),
+  verifyQRCode: (data) => api.post('/orders/verify-qr/', data),
+  
+  // OTP Functions
+  getBuyerOTP: (orderId) => api.get(`/orders/${orderId}/otp/`),
   
   // Order Actions (permissions checked in backend)
-  verifyQRCode: (data) => api.post('/orders/verify-qr/', data),
-  confirmOrder: (orderId) => api.post(`/orders/${orderId}/confirm/`),
+  confirmOrder: (orderId, data) => api.post(`/orders/${orderId}/confirm/`, data),
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
-  saveQRCode: (orderId, data) => api.patch(`/orders/${orderId}/qr-code/`, data),
 };
 
 // CREDITS

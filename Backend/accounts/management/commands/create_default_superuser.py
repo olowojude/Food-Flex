@@ -24,12 +24,12 @@ class Command(BaseCommand):
             )
             
             self.stdout.write(
-                self.style.SUCCESS(f'✅ Superuser created successfully!')
+                self.style.SUCCESS(f'Superuser created successfully!')
             )
             self.stdout.write(f'Email: {email}')
             self.stdout.write(f'Password: {password}')
             self.stdout.write(
-                self.style.WARNING('⚠️  IMPORTANT: Change this password immediately after first login!')
+                self.style.WARNING('IMPORTANT: Change this password immediately after first login!')
             )
             
         except Exception as e:

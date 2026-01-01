@@ -140,7 +140,7 @@ export default function ImageUpload({
       {/* Error Message */}
       {error && (
         <p className="text-sm text-red-600 flex items-center gap-1">
-          <span>⚠️</span>
+          <span></span>
           <span>{error}</span>
         </p>
       )}

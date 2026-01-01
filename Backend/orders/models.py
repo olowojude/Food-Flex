@@ -1,11 +1,15 @@
 from django.db import models
 from django.core.validators import MinValueValidator
 from django.utils.crypto import get_random_string
+from django.utils import timezone
+from datetime import timedelta
 from accounts.models import User
 from shop.models import Product
 import qrcode
 from io import BytesIO
 import base64
+import random
+import string
 
 
 class Cart(models.Model):
@@ -121,6 +125,11 @@ class Order(models.Model):
     qr_code_token = models.TextField(blank=True, null=True)
     qr_code_image = models.URLField(blank=True, null=True)
     
+    otp_code = models.CharField(max_length=6, blank=True, null=True)
+    otp_generated_at = models.DateTimeField(blank=True, null=True)
+    otp_expires_at = models.DateTimeField(blank=True, null=True)
+    otp_verified = models.BooleanField(default=False)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -136,6 +145,7 @@ class Order(models.Model):
             models.Index(fields=['order_number']),
             models.Index(fields=['qr_code_token']),
             models.Index(fields=['status']),
+            models.Index(fields=['otp_code']), 
         ]
     
     def __str__(self):
@@ -183,9 +193,54 @@ class Order(models.Model):
         except Exception as e:
             raise Exception(f"QR code generation failed: {str(e)}")
     
-    def confirm_order(self, confirmed_by_seller):
-        from django.utils import timezone
+    def generate_otp(self):
+        # Generate random 6-digit code
+        self.otp_code = ''.join(random.choices(string.digits, k=6))
+        self.otp_generated_at = timezone.now()
+        self.otp_expires_at = timezone.now() + timedelta(minutes=10)
+        self.otp_verified = False
+        self.save()
         
+        print(f"🔐 OTP Generated for Order {self.order_number}: {self.otp_code}")  # For debugging
+        
+        return self.otp_code
+    
+    def verify_otp(self, otp_input):
+        # Check if OTP exists
+        if not self.otp_code:
+            return False, "No OTP generated for this order"
+        
+        # Check if OTP has expired
+        if timezone.now() > self.otp_expires_at:
+            return False, "OTP has expired. Please scan QR code again."
+        
+        # Check if OTP already used
+        if self.otp_verified:
+            return False, "OTP already used"
+        
+        # Verify OTP code
+        if self.otp_code == otp_input:
+            self.otp_verified = True
+            self.save()
+            return True, "OTP verified successfully"
+        else:
+            return False, "Invalid OTP code"
+    
+    def clear_otp(self):
+        self.otp_code = None
+        self.otp_generated_at = None
+        self.otp_expires_at = None
+        self.otp_verified = False
+        self.save()
+    
+    def get_otp_time_remaining(self):
+        if not self.otp_expires_at:
+            return 0
+        
+        remaining = (self.otp_expires_at - timezone.now()).total_seconds()
+        return max(0, int(remaining))
+    
+    def confirm_order(self, confirmed_by_seller):
         if self.status != self.OrderStatus.PENDING:
             raise ValueError(f"Cannot confirm order with status: {self.status}")
         
@@ -197,8 +252,6 @@ class Order(models.Model):
         self.save()
     
     def complete_order(self):
-        from django.utils import timezone
-        
         if self.status != self.OrderStatus.CONFIRMED:
             raise ValueError(f"Cannot complete order with status: {self.status}")
         
@@ -214,11 +267,13 @@ class Order(models.Model):
         if self.status in [self.OrderStatus.COMPLETED, self.OrderStatus.CANCELLED]:
             raise ValueError(f"Cannot cancel order with status: {self.status}")
         
+        # Restore stock for all items
         for item in self.items.all():
             if item.product:  # Check product still exists
                 item.product.stock_quantity += item.quantity
                 item.product.save(update_fields=['stock_quantity'])
         
+        # Restore buyer's credit
         credit_account = self.buyer.credit_account
         credit_account.credit_balance += self.total_amount
         credit_account.total_credit_used -= self.total_amount
@@ -228,6 +283,7 @@ class Order(models.Model):
         
         credit_account.save()
         
+        # Log credit transaction
         from credits.models import CreditTransaction
         CreditTransaction.objects.create(
             credit_account=credit_account,

@@ -24,7 +24,6 @@ export function AuthProvider({ children }) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (error) {
-        console.error('Error parsing user from cookies:', error);
         Cookies.remove('user');
       }
     }
@@ -52,7 +51,6 @@ export function AuthProvider({ children }) {
       router.push('/');
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Login failed',
@@ -74,7 +72,6 @@ export function AuthProvider({ children }) {
       router.push('/');
       return { success: true };
     } catch (error) {
-      console.error('Registration error:', error);
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data || 'Registration failed',
@@ -100,7 +97,6 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Update error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Update failed',
@@ -118,7 +114,6 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Refresh user error:', error);
       return { success: false };
     }
   };

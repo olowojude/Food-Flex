@@ -420,7 +420,7 @@ export default function PeoplePage() {
                     <option value="ADMIN">Admin</option>
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    ⚠️ Changing role will affect user permissions
+                    Changing role will affect user permissions
                   </p>
                 </div>
 

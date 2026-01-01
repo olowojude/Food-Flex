@@ -52,7 +52,6 @@ export default function SearchBar({ onClose }) {
       setResults(products);
       setIsOpen(true);
     } catch (error) {
-      console.error('Search error:', error);
       setResults([]);
     } finally {
       setLoading(false);

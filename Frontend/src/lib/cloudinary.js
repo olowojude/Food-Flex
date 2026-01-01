@@ -51,7 +51,6 @@ export async function uploadImage(file, folder = '') {
     const data = await response.json();
     return data.secure_url; // Returns HTTPS URL
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
     throw error;
   }
 }
@@ -67,7 +66,6 @@ export async function uploadMultipleImages(files, folder = '') {
     const uploadPromises = files.map(file => uploadImage(file, folder));
     return await Promise.all(uploadPromises);
   } catch (error) {
-    console.error('Multiple upload error:', error);
     throw error;
   }
 }
@@ -81,7 +79,6 @@ export async function uploadMultipleImages(files, folder = '') {
 export async function deleteImage(publicId) {
   // This would need to be implemented in your Django backend
   // since deletion requires API secret (can't be exposed in frontend)
-  console.warn('Image deletion should be handled by backend');
   throw new Error('Delete operation not implemented yet');
 }
 

@@ -220,7 +220,7 @@ export default function CheckoutPage() {
                         Insufficient Credit
                       </p>
                       <p className="text-xs text-red-700">
-                        You need ₦{(subtotal - availableCredit).toLocaleString()} more credit
+                        You need ₦{(subtotal - availableCredit).toLocaleString()} more credit or remove some items
                       </p>
                     </div>
                   </div>

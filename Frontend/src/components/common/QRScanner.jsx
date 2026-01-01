@@ -397,7 +397,7 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
         {/* Tips */}
         <div className="bg-gray-50 p-4 border-t">
           <p className="text-sm text-gray-600 text-center">
-            💡 <strong>Tip:</strong> Make sure the QR code is well-lit and in focus
+            <strong>Tip:</strong> Make sure the QR code is well-lit and in focus
           </p>
         </div>
       </div>

@@ -389,15 +389,19 @@ def verify_qr_code(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        otp_code = order.generate_otp()
+
         # Return order details
         return Response({
             'id': order.id,
             'order_number': order.order_number,
             'status': order.status,
             'buyer_name': order.buyer.get_full_name(),
+            'buyer_email': order.buyer.email,
             'total_amount': str(order.total_amount),
             'items_count': order.items.count(),
-            'message': 'QR code verified successfully'
+            'otp_generated': True, 
+            'message': 'QR code verified. OTP sent to buyer. Ask buyer for OTP code.'
         }, status=status.HTTP_200_OK)
         
     except Order.DoesNotExist:
@@ -448,12 +452,34 @@ def confirm_order(request, order_id):
             status=status.HTTP_403_FORBIDDEN
         )
     
+        # Get OTP from request
+    otp_code = request.data.get('otp_code')
+    
+    if not otp_code:
+        return Response(
+            {'error': 'OTP code is required to confirm order'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
     try:
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
             
-            # Confirm order
+            success, message = order.verify_otp(otp_code)
+            
+            if not success:
+                return Response(
+                    {'error': message},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # OTP verified! Now confirm the order
             order.confirm_order(user)
+            
+            # Clear OTP after successful confirmation
+            order.clear_otp()
+            
+            from .serializers import OrderDetailSerializer
             
             return Response(
                 {
@@ -474,6 +500,71 @@ def confirm_order(request, order_id):
             status=status.HTTP_400_BAD_REQUEST
         )
 
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_buyer_otp(request, order_id):
+    user = request.user
+    
+    if user.role != 'BUYER':
+        return Response(
+            {'error': 'Only buyers can view OTP'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        order = Order.objects.get(id=order_id, buyer=user)
+        
+        # Check if OTP exists and not expired
+        if not order.otp_code:
+            return Response(
+                {
+                    'has_otp': False,
+                    'message': 'No OTP generated yet. Seller needs to scan your QR code first.'
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        # Check if expired
+        time_remaining = order.get_otp_time_remaining()
+        if time_remaining <= 0:
+            return Response(
+                {
+                    'has_otp': False,
+                    'expired': True,
+                    'message': 'OTP has expired. Ask seller to scan QR code again.'
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        # Check if already used
+        if order.otp_verified:
+            return Response(
+                {
+                    'has_otp': False,
+                    'verified': True,
+                    'message': 'OTP already used. Order is being processed.'
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        # Return valid OTP
+        return Response(
+            {
+                'has_otp': True,
+                'otp_code': order.otp_code,
+                'time_remaining': time_remaining,
+                'expires_at': order.otp_expires_at,
+                'message': 'Share this code with the seller to collect your order.'
+            },
+            status=status.HTTP_200_OK
+        )
+        
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Order not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])

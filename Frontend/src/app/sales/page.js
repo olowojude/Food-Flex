@@ -23,7 +23,7 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [scanningOrderId, setScanningOrderId] = useState(null);
-  const [processing, setProcessing] = useState(false); // ✅ FIXED: Added missing state
+  const [processing, setProcessing] = useState(false); 
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -106,7 +106,7 @@ export default function SalesPage() {
       }
 
       if (order.status !== 'PENDING') {
-        alert(`⚠️ This order is already ${order.status}. Cannot scan again.`);
+        alert(`This order is already ${order.status}. Cannot scan again.`);
         setProcessing(false);
         return;
       }
@@ -115,7 +115,7 @@ export default function SalesPage() {
       const response = await orderAPI.verifyQRCode({ qr_data: qrData });
       
       if (response.data.id) {
-        // ✅ Success - redirect to order detail with scan flag
+        // Success - redirect to order detail with scan flag
         router.push(`/orders/${response.data.id}?scan=true`);
       }
     } catch (error) {
@@ -134,7 +134,7 @@ export default function SalesPage() {
 
     try {
       await orderAPI.completeOrder(orderId);
-      alert('✅ Order completed successfully!');
+      alert('Order completed successfully!');
       fetchOrders(); // Refresh orders
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to complete order');

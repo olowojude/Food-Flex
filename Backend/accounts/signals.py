@@ -58,14 +58,12 @@ def complete_role_change(sender, instance, created, **kwargs):
                 business_address=instance.address or "",
                 store_name=f"{instance.first_name or instance.username}'s Store"
             )
-            print(f"✅ Seller profile created for {instance.email}")
         
         delattr(instance, '_create_seller_profile')
     
     if hasattr(instance, '_delete_seller_profile') and instance._delete_seller_profile:
         if hasattr(instance, 'seller_profile'):
             instance.seller_profile.delete()
-            print(f"✅ Seller profile deleted for {instance.email}")
         
         # Reactivate credit account
         if hasattr(instance, 'credit_account'):

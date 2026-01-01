@@ -10,7 +10,6 @@ urlpatterns = [
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    path('google-login/', views.google_login, name='google_login'),
     
     path('profile/', views.user_profile, name='user_profile'),
     path('profile/password/', views.change_password, name='change_password'),

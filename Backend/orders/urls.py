@@ -24,6 +24,7 @@ urlpatterns = [
     path('<int:order_id>/confirm/', views.confirm_order, name='confirm_order'),
     path('<int:order_id>/complete/', views.complete_order, name='complete_order'),
     path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
+    path('<int:order_id>/otp/', views.get_buyer_otp, name='get-buyer-otp'),
     
     # for admin
     path('all/', views.all_orders, name='all_orders'),
