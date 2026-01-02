@@ -14,6 +14,11 @@ from .serializers import (
     ProductReviewCreateUpdateSerializer
 )
 from accounts.permissions import IsAdmin, IsSeller, IsBuyer
+from rest_framework.pagination import PageNumberPagination
+from accounts.permissions import IsSeller
+from .models import StoreLocation, Product
+from .serializers import StoreLocationSerializer, ProductSerializer
+from .utils import get_products_in_radius, calculate_distance
 
 
 class ProductPagination(PageNumberPagination):
@@ -223,7 +228,6 @@ def product_create(request):
 @api_view(['PUT', 'PATCH'])
 @permission_classes([IsSeller])
 def product_update(request, pk):
-    """Seller updates their own product"""
     try:
         product = Product.objects.get(pk=pk, seller=request.user)
     except Product.DoesNotExist:
@@ -388,3 +392,239 @@ def delete_review(request, review_id):
             {'error': 'Review not found or you do not have permission to delete it'},
             status=status.HTTP_404_NOT_FOUND
         )
+    
+@api_view(['GET', 'POST'])
+@permission_classes([IsSeller])
+def store_locations_list(request):
+    """
+    GET: List all store locations for the authenticated seller
+    POST: Create a new store location
+    """
+    if request.method == 'GET':
+        locations = StoreLocation.objects.filter(
+            seller=request.user,
+            is_active=True
+        ).order_by('-created_at')
+        
+        serializer = StoreLocationSerializer(locations, many=True)
+        return Response(serializer.data)
+    
+    elif request.method == 'POST':
+        serializer = StoreLocationSerializer(data=request.data)
+        
+        if serializer.is_valid():
+            serializer.save(seller=request.user)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsSeller])
+def store_location_detail(request, pk):
+    """
+    GET: Retrieve a specific store location
+    PATCH: Update a store location
+    DELETE: Soft delete a store location
+    """
+    try:
+        location = StoreLocation.objects.get(
+            pk=pk,
+            seller=request.user,
+            is_active=True
+        )
+    except StoreLocation.DoesNotExist:
+        return Response(
+            {'error': 'Store location not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    if request.method == 'GET':
+        serializer = StoreLocationSerializer(location)
+        return Response(serializer.data)
+    
+    elif request.method == 'PATCH':
+        serializer = StoreLocationSerializer(
+            location,
+            data=request.data,
+            partial=True
+        )
+        
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    elif request.method == 'DELETE':
+        # Soft delete
+        location.is_active = False
+        location.save()
+        return Response(
+            {'message': 'Store location deleted successfully'},
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+
+# ============================================
+# LOCATION-BASED PRODUCT SEARCH (BUYERS)
+# ============================================
+
+@api_view(['GET'])
+def products_near_me(request):
+    """
+    Get products near user's GPS location.
+    
+    Query params:
+    - lat: User's latitude (required)
+    - lng: User's longitude (required)
+    - radius: Search radius in km (optional, default: 10)
+    - category: Filter by category slug (optional)
+    - min_price: Minimum price (optional)
+    - max_price: Maximum price (optional)
+    - sort: Sort order (optional, default: 'distance')
+    """
+    # Validate required parameters
+    lat = request.GET.get('lat')
+    lng = request.GET.get('lng')
+    
+    if not lat or not lng:
+        return Response(
+            {'error': 'Latitude (lat) and longitude (lng) are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (TypeError, ValueError):
+        return Response(
+            {'error': 'Invalid latitude or longitude format'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Optional parameters
+    radius = float(request.GET.get('radius', 10))
+    category = request.GET.get('category')
+    min_price = request.GET.get('min_price')
+    max_price = request.GET.get('max_price')
+    sort = request.GET.get('sort', 'distance')
+    
+    # Get products using smart radius expansion
+    result = get_products_in_radius(lat, lng, radius)
+    
+    products = result['products']
+    
+    # Apply additional filters
+    if category:
+        products = products.filter(category__slug=category)
+    
+    if min_price:
+        products = products.filter(price__gte=min_price)
+    
+    if max_price:
+        products = products.filter(price__lte=max_price)
+    
+    # Calculate distance for each product (to closest store)
+    products_with_distance = []
+    nearby_stores = result['nearby_stores']
+    
+    for product in products:
+        product_stores = product.store_locations.all()
+        
+        # Find closest store for this product
+        closest_distance = None
+        closest_store = None
+        
+        for store_info in nearby_stores:
+            if store_info['store'] in product_stores:
+                if closest_distance is None or store_info['distance_km'] < closest_distance:
+                    closest_distance = store_info['distance_km']
+                    closest_store = {
+                        'id': store_info['store'].id,
+                        'name': store_info['store'].name,
+                        'address': store_info['store'].address,
+                        'city': store_info['store'].city,
+                        'state': store_info['store'].state,
+                        'distance_km': store_info['distance_km']
+                    }
+        
+        products_with_distance.append({
+            'product': product,
+            'closest_store': closest_store,
+            'distance_km': closest_distance
+        })
+    
+    # Sort by distance or other criteria
+    if sort == 'distance':
+        products_with_distance.sort(key=lambda x: x['distance_km'] or 9999)
+    elif sort == 'price_asc':
+        products_with_distance.sort(key=lambda x: x['product'].price)
+    elif sort == 'price_desc':
+        products_with_distance.sort(key=lambda x: x['product'].price, reverse=True)
+    
+    # Serialize products
+    serialized_products = []
+    for item in products_with_distance:
+        context = {'closest_store': item['closest_store']}
+        serializer = ProductSerializer(item['product'], context=context)
+        data = serializer.data
+        data['distance_km'] = item['distance_km']
+        serialized_products.append(data)
+    
+    # Paginate
+    paginator = PageNumberPagination()
+    paginator.page_size = 30
+    page = paginator.paginate_queryset(serialized_products, request)
+    
+    return paginator.get_paginated_response({
+        'products': page,
+        'metadata': {
+            'radius_used': result['radius_used'],
+            'total_products': result['product_count'],
+            'total_stores': result['store_count'],
+            'user_location': {'lat': lat, 'lng': lng}
+        }
+    })
+
+
+@api_view(['GET'])
+def products_by_location(request):
+    """
+    Filter products by city/state (text-based, no GPS).
+    
+    Query params:
+    - city: Filter by city name
+    - state: Filter by state name
+    """
+    city = request.GET.get('city')
+    state = request.GET.get('state')
+    
+    if not city and not state:
+        return Response(
+            {'error': 'Please provide city or state'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    products = Product.objects.filter(
+        is_active=True,
+        stock_quantity__gt=0
+    )
+    
+    if city:
+        products = products.filter(store_locations__city__iexact=city)
+    
+    if state:
+        products = products.filter(store_locations__state__iexact=state)
+    
+    products = products.select_related('seller', 'category').prefetch_related(
+        'store_locations'
+    ).distinct()
+    
+    # Paginate
+    paginator = PageNumberPagination()
+    paginator.page_size = 30
+    page = paginator.paginate_queryset(products, request)
+    
+    serializer = ProductSerializer(page, many=True)
+    return paginator.get_paginated_response(serializer.data)

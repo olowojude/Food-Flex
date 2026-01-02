@@ -126,7 +126,6 @@ class SellerProfile(models.Model):
         return f"{self.get_store_name()} - {self.user.email}"
     
     def get_store_name(self):
-        """Return store_name if set, otherwise return '{first_name}'s Store'"""
         if self.store_name:
             return self.store_name
         return f"{self.user.first_name}'s Store" if self.user.first_name else f"{self.user.email.split('@')[0]}'s Store"

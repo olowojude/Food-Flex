@@ -3,20 +3,28 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from django.db import transaction
 from django.utils import timezone
+from datetime import timedelta
 from .models import CreditAccount, RepaymentHistory, CreditLimitHistory, CreditTransaction
 from .serializers import (
-    CreditAccountSerializer, RepaymentSerializer,
-    RepaymentHistorySerializer, CreditLimitIncreaseSerializer,
-    CreditLimitHistorySerializer, CreditTransactionSerializer
+    CreditAccountSerializer, CreditLimitIncreaseSerializer,
+    RepaymentHistorySerializer, CreditLimitHistorySerializer, 
+    CreditTransactionSerializer
 )
 from django.conf import settings
 import requests
 import secrets
 
 
+# ============================================
+# BUYER ENDPOINTS - Self-Service
+# ============================================
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_account(request):
+    """
+    Get logged-in buyer's credit account details
+    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -25,7 +33,6 @@ def my_credit_account(request):
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Get or create credit account
     credit_account, created = CreditAccount.objects.get_or_create(user=user)
     serializer = CreditAccountSerializer(credit_account)
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -34,6 +41,9 @@ def my_credit_account(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_transactions(request):
+    """
+    Get logged-in buyer's credit transactions
+    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -50,11 +60,33 @@ def my_credit_transactions(request):
     return Response([], status=status.HTTP_200_OK)
 
 
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def my_repayment_history(request):
+    """
+    Get logged-in buyer's repayment history
+    """
+    user = request.user
+    
+    if user.role != 'BUYER':
+        return Response(
+            {'error': 'Only buyers have repayment history'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    if hasattr(user, 'credit_account'):
+        repayments = user.credit_account.repayment_history.all()
+        serializer = RepaymentHistorySerializer(repayments, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    return Response([], status=status.HTTP_200_OK)
+
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def initiate_buyer_repayment(request):
     """
-    Buyer initiates loan repayment via Hydrogen Pay
+    Buyer initiates loan repayment via Hydrogen Pay (Self-Service Only)
     """
     user = request.user
     
@@ -110,7 +142,7 @@ def initiate_buyer_repayment(request):
         "amount": amount,
         "email": user.email,
         "currency": "NGN",
-        "description": f"Loan Repayment - FoodFlex",
+        "description": "Loan Repayment - FoodFlex",
         "meta": f"Repayment for user {user.id}",
         "callback": f"{settings.FRONTEND_URL}/profile?repayment=success",
         "customerName": f"{user.first_name} {user.last_name}",
@@ -134,10 +166,9 @@ def initiate_buyer_repayment(request):
             transaction_type=CreditTransaction.TransactionType.REPAYMENT,
             amount=amount,
             balance_before=credit_account.credit_balance,
-            balance_after=credit_account.credit_balance,  # Will update on webhook
-            description=f"Pending loan repayment via Hydrogen Pay",
+            balance_after=credit_account.credit_balance,
+            description="Pending loan repayment via Hydrogen Pay",
             reference=txn_ref,
-            status='PENDING'  # Add this field to your model if needed
         )
         
         return Response({
@@ -159,19 +190,16 @@ def initiate_buyer_repayment(request):
         )
 
 
-# ============================================
-# HYDROGEN PAY WEBHOOK
-# ============================================
 @api_view(['POST'])
-@permission_classes([permissions.AllowAny])  # Webhook from external service
+@permission_classes([permissions.AllowAny])
 def hydrogen_webhook(request):
     """
     Webhook to handle payment confirmation from Hydrogen Pay
+    Applies 5% bonus if payment made within 30 days
     """
     try:
-        # Verify webhook signature (important for security)
+        # Verify webhook signature (TODO: implement signature verification)
         signature = request.headers.get('x-squad-signature')
-        # TODO: Implement signature verification with your Hydrogen secret
         
         data = request.data
         
@@ -199,31 +227,43 @@ def hydrogen_webhook(request):
                 
                 # Update transaction
                 txn.balance_after = credit_account.credit_balance
-                txn.description = f"Completed loan repayment via Hydrogen Pay"
+                txn.description = "Completed loan repayment via Hydrogen Pay"
                 txn.save()
                 
-                # Check if bonus should be applied
-                usage_percentage = (credit_account.outstanding_balance / credit_account.credit_limit) * 100
+                # ============================================
+                # CHECK IF BONUS SHOULD BE APPLIED
+                # Bonus: 5% if repaid within 30 days
+                # ============================================
                 bonus_applied = False
                 bonus_amount = 0
                 
-                if usage_percentage < 50:
-                    # Apply 5% bonus
-                    bonus_amount = credit_account.credit_limit * 0.05
-                    new_limit = credit_account.credit_limit + bonus_amount
-                    credit_account.increase_credit_limit(new_limit, credit_account.user)
-                    bonus_applied = True
+                # Find the most recent PURCHASE transaction (when they borrowed)
+                last_purchase = credit_account.transactions.filter(
+                    transaction_type=CreditTransaction.TransactionType.PURCHASE
+                ).order_by('-created_at').first()
+                
+                if last_purchase:
+                    # Calculate days since last purchase
+                    days_since_purchase = (timezone.now() - last_purchase.created_at).days
                     
-                    # Log bonus transaction
-                    CreditTransaction.objects.create(
-                        credit_account=credit_account,
-                        transaction_type=CreditTransaction.TransactionType.LIMIT_INCREASE,
-                        amount=bonus_amount,
-                        balance_before=credit_account.credit_balance - bonus_amount,
-                        balance_after=credit_account.credit_balance,
-                        description=f"5% bonus for maintaining low usage after repayment",
-                        reference=f"BONUS_{txn_ref}"
-                    )
+                    # Apply bonus if repaying within 30 days (on time)
+                    if days_since_purchase <= 30:
+                        # Apply 5% bonus to credit limit
+                        bonus_amount = credit_account.credit_limit * 0.05
+                        new_limit = credit_account.credit_limit + bonus_amount
+                        credit_account.increase_credit_limit(new_limit, credit_account.user)
+                        bonus_applied = True
+                        
+                        # Log bonus transaction
+                        CreditTransaction.objects.create(
+                            credit_account=credit_account,
+                            transaction_type=CreditTransaction.TransactionType.LIMIT_INCREASE,
+                            amount=bonus_amount,
+                            balance_before=credit_account.credit_balance - bonus_amount,
+                            balance_after=credit_account.credit_balance,
+                            description=f"5% bonus for repaying within 30 days (paid after {days_since_purchase} days)",
+                            reference=f"BONUS_{txn_ref}"
+                        )
                 
                 return Response({
                     'message': 'Repayment processed successfully',
@@ -244,31 +284,16 @@ def hydrogen_webhook(request):
         )
 
 
+# ============================================
+# ADMIN ENDPOINTS - Read-Only Monitoring
+# ============================================
 
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def my_repayment_history(request):
-    user = request.user
-    
-    if user.role != 'BUYER':
-        return Response(
-            {'error': 'Only buyers have repayment history'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    if hasattr(user, 'credit_account'):
-        repayments = user.credit_account.repayment_history.all()
-        serializer = RepaymentHistorySerializer(repayments, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    
-    return Response([], status=status.HTTP_200_OK)
-
-
-# Admin Views
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_accounts(request):
+    """
+    Admin views all credit accounts (monitoring only)
+    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all credit accounts'},
@@ -289,6 +314,9 @@ def all_credit_accounts(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def credit_account_detail(request, user_id):
+    """
+    Admin views specific user's credit account (monitoring only)
+    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit account details'},
@@ -308,68 +336,10 @@ def credit_account_detail(request, user_id):
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def process_repayment(request, user_id):
-    if not request.user.is_admin_user:
-        return Response(
-            {'error': 'Only admins can process repayments'},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    
-    serializer = RepaymentSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        try:
-            with transaction.atomic():
-                # Get user's credit account
-                credit_account = CreditAccount.objects.get(user_id=user_id)
-                
-                amount = serializer.validated_data['amount']
-                notes = serializer.validated_data.get('notes', '')
-                
-                if amount > credit_account.outstanding_balance:
-                    return Response(
-                        {'error': f'Repayment amount exceeds outstanding balance of ₦{credit_account.outstanding_balance:,.2f}'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                old_balance = credit_account.credit_balance
-                credit_account.process_repayment(amount, request.user)
-                
-                CreditTransaction.objects.create(
-                    credit_account=credit_account,
-                    transaction_type=CreditTransaction.TransactionType.REPAYMENT,
-                    amount=amount,
-                    balance_before=old_balance,
-                    balance_after=credit_account.credit_balance,
-                    description=f"Loan repayment processed by admin. {notes}",
-                    reference=f"REPAY_{credit_account.user.id}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
-                )
-                
-                return Response(
-                    {
-                        'message': 'Repayment processed successfully',
-                        'credit_account': CreditAccountSerializer(credit_account).data
-                    },
-                    status=status.HTTP_200_OK
-                )
-                
-        except CreditAccount.DoesNotExist:
-            return Response(
-                {'error': 'Credit account not found'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
 def increase_credit_limit(request, user_id):
+    """
+    Admin increases user's credit limit (promotional/reward purposes)
+    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can increase credit limits'},
@@ -432,6 +402,9 @@ def increase_credit_limit(request, user_id):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_repayment_history(request):
+    """
+    Admin views all repayment history (reporting/analytics)
+    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all repayment history'},
@@ -446,6 +419,9 @@ def all_repayment_history(request):
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_limit_history(request):
+    """
+    Admin views credit limit history (audit trail)
+    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit limit history'},

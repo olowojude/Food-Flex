@@ -26,4 +26,12 @@ urlpatterns = [
     path('products/<int:product_id>/reviews/create/', views.create_review, name='create_review'),
     path('reviews/<int:review_id>/', views.update_review, name='update_review'),
     path('reviews/<int:review_id>/delete/', views.delete_review, name='delete_review'),
+
+    # STORE LOCATION ENDPOINTS (Sellers)
+    path('store-locations/', views.store_locations_list, name='store_locations_list'),
+    path('store-locations/<int:pk>/', views.store_location_detail, name='store_location_detail'),
+    
+    # LOCATION-BASED PRODUCT SEARCH (Buyers)
+    path('products/near-me/', views.products_near_me, name='products_near_me'),
+    path('products/by-location/', views.products_by_location, name='products_by_location'),
 ]

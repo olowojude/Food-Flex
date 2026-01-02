@@ -9,13 +9,14 @@ import ProductCard from '@/components/common/ProductCard';
 import Toast from '@/components/common/Toast';
 import { 
   Plus, Edit, Trash2, Package, Search, 
-  Filter, AlertCircle, CheckCircle, XCircle, Eye, DollarSign, TrendingUp, LayoutGrid, List
+  Filter, AlertCircle, CheckCircle, XCircle, Eye, DollarSign, TrendingUp, 
+  LayoutGrid, List, MapPin
 } from 'lucide-react';
 import Link from 'next/link';
 
 export default function InventoryPage() {
   const router = useRouter();
-    const { isAuthenticated, isLoading, isSeller } = useAuth();
+  const { isAuthenticated, isLoading, isSeller } = useAuth();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,15 +26,15 @@ export default function InventoryPage() {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
   const [toast, setToast] = useState(null);
 
-useEffect(() => {
-  if (!isLoading && !isAuthenticated) {
-    router.push('/login');
-  } else if (!isLoading && !isSeller) {
-    router.push('/');
-  } else if (isAuthenticated && isSeller) {
-    fetchProducts();
-  }
-}, [isAuthenticated, isLoading, isSeller, router]);
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push('/login');
+    } else if (!isLoading && !isSeller) {
+      router.push('/');
+    } else if (isAuthenticated && isSeller) {
+      fetchProducts();
+    }
+  }, [isAuthenticated, isLoading, isSeller, router]);
 
   // Auto-refresh when page gains focus
   useEffect(() => {
@@ -60,7 +61,6 @@ useEffect(() => {
       setFilteredProducts(sorted);
     } catch (error) {
       setLoading(false);
-      setError('Failed to fetch products');
       
       if (error.response?.status === 403) {
         showToast('You need seller permissions to access inventory', 'error');
@@ -172,14 +172,23 @@ useEffect(() => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">My Inventory</h1>
-              <p className="text-gray-600">Manage your products</p>
+              <p className="text-gray-600">Manage your products and store locations</p>
             </div>
-            <Link href="/inventory/new">
-              <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
-                <Plus className="w-5 h-5" />
-                Add Product
-              </button>
-            </Link>
+            <div className="flex gap-3">
+              {/* NEW: Store Locations Button */}
+              <Link href="/inventory/locations">
+                <button className="bg-purple-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-2">
+                  <MapPin className="w-5 h-5" />
+                  <span className="hidden sm:inline">Store Locations</span>
+                </button>
+              </Link>
+              <Link href="/inventory/new">
+                <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition flex items-center gap-2">
+                  <Plus className="w-5 h-5" />
+                  Add Product
+                </button>
+              </Link>
+            </div>
           </div>
 
           {/* Stats */}
@@ -370,7 +379,6 @@ useEffect(() => {
 
                       <div className="flex flex-wrap items-center gap-4 mb-3">
                         <div className="flex items-center gap-2">
-                          {/* <DollarSign className="w-4 h-4 text-gray-500" /> */}
                           <span className="text-sm font-medium text-gray-900">
                             ₦{parseFloat(product.price).toLocaleString()}
                           </span>
@@ -382,7 +390,6 @@ useEffect(() => {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {/* <Eye className="w-4 h-4 text-gray-500" /> */}
                           <span className="text-sm text-gray-600">
                             {product.views_count} views
                           </span>
@@ -453,12 +460,20 @@ useEffect(() => {
                 : 'Get started by adding your first product'}
             </p>
             {!searchQuery && statusFilter === 'all' && (
-              <Link href="/inventory/new">
-                <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition inline-flex items-center gap-2">
-                  <Plus className="w-5 h-5" />
-                  Add Your First Product
-                </button>
-              </Link>
+              <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <Link href="/inventory/locations">
+                  <button className="bg-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-purple-700 transition inline-flex items-center gap-2">
+                    <MapPin className="w-5 h-5" />
+                    Set Up Store Location First
+                  </button>
+                </Link>
+                <Link href="/inventory/new">
+                  <button className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition inline-flex items-center gap-2">
+                    <Plus className="w-5 h-5" />
+                    Add Your First Product
+                  </button>
+                </Link>
+              </div>
             )}
           </div>
         )}

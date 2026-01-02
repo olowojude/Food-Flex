@@ -13,7 +13,7 @@ urlpatterns = [
     
     path('accounts/', views.all_credit_accounts, name='all_credit_accounts'),
     path('accounts/<int:user_id>/', views.credit_account_detail, name='credit_account_detail'),
-    path('accounts/<int:user_id>/repayment/', views.process_repayment, name='process_repayment'),
+    # path('accounts/<int:user_id>/repayment/', views.process_repayment, name='process_repayment'),
     path('accounts/<int:user_id>/increase-limit/', views.increase_credit_limit, name='increase_credit_limit'),
     path('repayments/all/', views.all_repayment_history, name='all_repayment_history'),
     path('limit-history/', views.all_credit_limit_history, name='all_credit_limit_history'),

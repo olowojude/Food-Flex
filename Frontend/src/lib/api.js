@@ -233,37 +233,49 @@ export const getUserLocation = () => {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy
-        });
-      },
-      (error) => {
-        let message = 'Unable to retrieve location';
-        
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            message = 'Location access denied. Please enable location permissions.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            message = 'Location information is unavailable.';
-            break;
-          case error.TIMEOUT:
-            message = 'Location request timed out.';
-            break;
+    // Try high accuracy first, fallback to low accuracy if it times out
+    const tryGetLocation = (highAccuracy) => {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+        },
+        (error) => {
+          if (error.code === error.TIMEOUT && highAccuracy) {
+            // Timeout with high accuracy, try again with low accuracy
+            console.log('High accuracy timed out, trying low accuracy...');
+            tryGetLocation(false);
+          } else {
+            let message = 'Unable to retrieve location';
+            
+            switch(error.code) {
+              case error.PERMISSION_DENIED:
+                message = 'Location access denied. Please enable location permissions in your browser settings.';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                message = 'Location information is unavailable. Please ensure location services are enabled.';
+                break;
+              case error.TIMEOUT:
+                message = 'Location request timed out. Please try again or enter coordinates manually.';
+                break;
+            }
+            
+            reject(new Error(message));
+          }
+        },
+        {
+          enableHighAccuracy: highAccuracy,
+          timeout: highAccuracy ? 15000 : 30000, // 15s for high accuracy, 30s for low
+          maximumAge: highAccuracy ? 0 : 300000  // Don't cache for high accuracy, 5min cache for low
         }
-        
-        reject(new Error(message));
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
+      );
+    };
+
+    // Start with high accuracy
+    tryGetLocation(true);
   });
 };
 

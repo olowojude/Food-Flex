@@ -409,13 +409,6 @@ export default function EditProductPage() {
               </Button>
             </Link>
           </div>
-
-          {/* Quick Stock Update Hint */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800">
-              💡 <strong>Quick Tip:</strong> To update only the stock quantity, just change the "Stock Quantity" field and click Update. All other fields will remain unchanged.
-            </p>
-          </div>
         </form>
       </div>
     </div>

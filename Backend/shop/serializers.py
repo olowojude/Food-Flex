@@ -1,5 +1,8 @@
+# backend/shop/serializers.py
+# REPLACE the entire file with this corrected version
+
 from rest_framework import serializers
-from .models import Category, Product, ProductReview
+from .models import Category, Product, ProductReview, StoreLocation
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -60,6 +63,42 @@ class SellerInfoSerializer(serializers.Serializer):
         return "Location not specified"
 
 
+# ============================================
+# STORE LOCATION SERIALIZERS
+# ============================================
+
+class StoreLocationSerializer(serializers.ModelSerializer):
+    """Serializer for store locations"""
+    seller_name = serializers.CharField(source='seller.first_name', read_only=True)
+    product_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = StoreLocation
+        fields = [
+            'id', 'name', 'address', 'city', 'state',
+            'latitude', 'longitude', 'is_active',
+            'seller', 'seller_name', 'product_count',
+            'created_at'
+        ]
+        read_only_fields = ['seller', 'created_at']
+    
+    def get_product_count(self, obj):
+        """Count products available at this location"""
+        return obj.products.filter(is_active=True, stock_quantity__gt=0).count()
+
+
+class StoreLocationListSerializer(serializers.ModelSerializer):
+    """Minimal serializer for listing store locations"""
+    
+    class Meta:
+        model = StoreLocation
+        fields = ['id', 'name', 'city', 'state']
+
+
+# ============================================
+# PRODUCT SERIALIZERS
+# ============================================
+
 class ProductListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     seller_name = serializers.SerializerMethodField()
@@ -94,28 +133,45 @@ class ProductListSerializer(serializers.ModelSerializer):
         return f"{obj.seller.email.split('@')[0]}'s Store"
 
 
-class ProductReviewSerializer(serializers.ModelSerializer):
-    buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
-    buyer_email = serializers.CharField(source='buyer.email', read_only=True)
+class ProductSerializer(serializers.ModelSerializer):
+    """Main product serializer with location support"""
+    category = CategorySerializer(read_only=True)
+    seller = serializers.SerializerMethodField()
+    store_locations = StoreLocationListSerializer(many=True, read_only=True)
+    closest_store = serializers.SerializerMethodField()
+    average_rating = serializers.ReadOnlyField()
     
     class Meta:
-        model = ProductReview
+        model = Product
         fields = [
-            'id', 'product', 'buyer', 'buyer_name', 'buyer_email',
-            'rating', 'comment', 'created_at', 'updated_at'
+            'id', 'name', 'slug', 'description', 'price', 'formatted_price',
+            'stock_quantity', 'is_in_stock', 'main_image', 'additional_images',
+            'category', 'seller', 'store_locations', 'closest_store',
+            'is_active', 'is_featured', 'views_count', 'sales_count',
+            'average_rating', 'created_at'
         ]
-        read_only_fields = ['buyer', 'created_at', 'updated_at']
     
-    def validate_rating(self, value):
-        if value < 1 or value > 5:
-            raise serializers.ValidationError("Rating must be between 1 and 5")
-        return value
+    def get_seller(self, obj):
+        return {
+            'id': obj.seller.id,
+            'store_name': f"{obj.seller.first_name}'s Store" if obj.seller.first_name else f"{obj.seller.email.split('@')[0]}'s Store",
+            'email': obj.seller.email,
+            'phone_number': obj.seller.phone_number,
+        }
+    
+    def get_closest_store(self, obj):
+        """
+        If user location is in context, return closest store with distance.
+        This is populated by the view when doing location-based search.
+        """
+        return self.context.get('closest_store', None)
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     seller_info = serializers.SerializerMethodField()
-    reviews = ProductReviewSerializer(many=True, read_only=True)
+    store_locations = StoreLocationListSerializer(many=True, read_only=True)
+    reviews = serializers.SerializerMethodField()
     average_rating = serializers.ReadOnlyField()
     
     class Meta:
@@ -125,23 +181,35 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'seller', 'seller_info', 'price', 'formatted_price', 'stock_quantity',
             'is_in_stock', 'main_image', 'additional_images',
             'weight', 'unit', 'is_active', 'is_featured',
-            'views_count', 'sales_count', 'reviews', 'average_rating',
+            'views_count', 'sales_count', 'store_locations',
+            'reviews', 'average_rating',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['slug', 'seller', 'views_count', 'sales_count', 'created_at', 'updated_at']
     
     def get_seller_info(self, obj):
         return SellerInfoSerializer(obj.seller).data
+    
+    def get_reviews(self, obj):
+        reviews = obj.reviews.select_related('buyer').order_by('-created_at')[:10]
+        return ProductReviewSerializer(reviews, many=True).data
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating products (sellers)"""
+    store_locations = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=StoreLocation.objects.filter(is_active=True),
+        required=False
+    )
     
     class Meta:
         model = Product
         fields = [
             'name', 'description', 'category', 'price',
             'stock_quantity', 'main_image', 'additional_images',
-            'weight', 'unit', 'is_active', 'is_featured'
+            'weight', 'unit', 'is_active',
+            'store_locations'  # Location support
         ]
     
     def validate_main_image(self, value):
@@ -172,6 +240,64 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
     def validate_category(self, value):
         if not value.is_active:
             raise serializers.ValidationError("Cannot assign product to inactive category")
+        return value
+    
+    def validate_store_locations(self, value):
+        """Ensure seller can only assign their own store locations"""
+        user = self.context['request'].user
+        
+        for location in value:
+            if location.seller != user:
+                raise serializers.ValidationError(
+                    "You can only assign your own store locations."
+                )
+        
+        return value
+    
+    def create(self, validated_data):
+        store_locations = validated_data.pop('store_locations', [])
+        product = Product.objects.create(**validated_data)
+        
+        # Assign store locations
+        if store_locations:
+            product.store_locations.set(store_locations)
+        
+        return product
+    
+    def update(self, instance, validated_data):
+        store_locations = validated_data.pop('store_locations', None)
+        
+        # Update basic fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update store locations if provided
+        if store_locations is not None:
+            instance.store_locations.set(store_locations)
+        
+        return instance
+
+
+# ============================================
+# PRODUCT REVIEW SERIALIZERS
+# ============================================
+
+class ProductReviewSerializer(serializers.ModelSerializer):
+    buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
+    buyer_email = serializers.CharField(source='buyer.email', read_only=True)
+    
+    class Meta:
+        model = ProductReview
+        fields = [
+            'id', 'product', 'buyer', 'buyer_name', 'buyer_email',
+            'rating', 'comment', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['buyer', 'created_at', 'updated_at']
+    
+    def validate_rating(self, value):
+        if value < 1 or value > 5:
+            raise serializers.ValidationError("Rating must be between 1 and 5")
         return value
 
 
