@@ -1,8 +1,7 @@
 'use client';
 
-
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { creditAPI, orderAPI } from '@/lib/api';
@@ -11,7 +10,6 @@ import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Toast from '@/components/common/Toast';
-import RepaymentModal from '@/components/common/RepaymentModal';
 import { 
   User, Mail, Phone, MapPin, CreditCard, DollarSign, 
   TrendingDown, Calendar, Camera, Lock, CheckCircle,
@@ -20,6 +18,7 @@ import {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, isBuyer, updateUser } = useAuth();
   const fileInputRef = useRef(null);
   
@@ -32,6 +31,8 @@ export default function ProfilePage() {
   const [toast, setToast] = useState(null);
   const [activeTab, setActiveTab] = useState('personal');
   const [showRepaymentModal, setShowRepaymentModal] = useState(false);
+  const [repaymentAmount, setRepaymentAmount] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
   
   const [formData, setFormData] = useState({
     first_name: '',
@@ -39,6 +40,19 @@ export default function ProfilePage() {
     address: '',
     profile_image: '',
   });
+
+  // Check for payment success callback
+  useEffect(() => {
+    const repaymentStatus = searchParams.get('repayment');
+    if (repaymentStatus === 'success') {
+      showToast('🎉 Repayment successful! Your account has been updated.', 'success');
+      fetchData(); // Refresh credit data
+      
+      // Clean up URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -68,6 +82,7 @@ export default function ProfilePage() {
         setOrders(ordersRes.data.results?.slice(0, 5) || ordersRes.data.slice(0, 5));
       }
     } catch (error) {
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -135,26 +150,38 @@ export default function ProfilePage() {
     }
   };
 
-  const handleRepayment = async (amount) => {
+  const handleRepaymentSubmit = async (e) => {
+    e.preventDefault();
+    
+    const amount = parseFloat(repaymentAmount);
+    const outstandingBalance = parseFloat(creditAccount?.outstanding_balance || 0);
+
+    if (!amount || amount <= 0) {
+      showToast('Please enter a valid amount', 'error');
+      return;
+    }
+
+    if (amount > outstandingBalance) {
+      showToast(`Amount cannot exceed outstanding balance of ₦${outstandingBalance.toLocaleString()}`, 'error');
+      return;
+    }
+
     try {
-      // Not yet implemented
-      const response = await creditAPI.processRepayment(user.id, { 
-        amount: amount 
-      });
-
-      showToast(`Successfully repaid ₦${amount.toLocaleString()}!`, 'success');
+      setProcessingPayment(true);
       
-      // Check if bonus was applied
-      if (response.data.bonus_applied) {
-        showToast(`🎉 Bonus! Your credit limit increased by ₦${response.data.bonus_amount.toLocaleString()}!`, 'success');
+      // Initiate payment with Hydrogen Pay
+      const response = await creditAPI.initiateBuyerRepayment(amount);
+      
+      if (response.data.payment_url) {
+        // Redirect to Hydrogen Pay checkout
+        window.location.href = response.data.payment_url;
+      } else {
+        showToast('Failed to initiate payment', 'error');
+        setProcessingPayment(false);
       }
-
-      setShowRepaymentModal(false);
-      
-      // Refresh credit data
-      await fetchData();
     } catch (error) {
-      throw new Error(error.response?.data?.error || 'Repayment failed. Please try again.');
+      showToast(error.response?.data?.error || 'Failed to initiate payment', 'error');
+      setProcessingPayment(false);
     }
   };
 
@@ -185,11 +212,87 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-gray-50 py-8">
       {/* Repayment Modal */}
       {showRepaymentModal && (
-        <RepaymentModal
-          creditAccount={creditAccount}
-          onRepaymentSuccess={handleRepayment}
-          onClose={() => setShowRepaymentModal(false)}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-gray-900">Repay Loan</h3>
+              <button
+                onClick={() => setShowRepaymentModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">Outstanding Balance</p>
+              <p className="text-3xl font-bold text-blue-600">
+                ₦{outstandingBalance.toLocaleString()}
+              </p>
+            </div>
+
+            <form onSubmit={handleRepaymentSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Repayment Amount
+                </label>
+                <input
+                  type="number"
+                  value={repaymentAmount}
+                  onChange={(e) => setRepaymentAmount(e.target.value)}
+                  placeholder="Enter amount"
+                  min="1"
+                  max={outstandingBalance}
+                  step="0.01"
+                  required
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Maximum: ₦{outstandingBalance.toLocaleString()}
+                </p>
+              </div>
+
+              {usagePercentage < 50 && (
+                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-sm text-green-800 flex items-center gap-2">
+                    <Gift className="w-4 h-4" />
+                    <span className="font-medium">Bonus Alert!</span>
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    Get 5% credit limit increase when you repay on time!
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-4">
+                <Button
+                  type="button"
+                  onClick={() => setShowRepaymentModal(false)}
+                  variant="secondary"
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  loading={processingPayment}
+                  className="flex-1"
+                >
+                  <Wallet className="w-5 h-5 mr-2" />
+                  Pay Now
+                </Button>
+              </div>
+            </form>
+
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Lock className="w-4 h-4" />
+                <span>Secured by Hydrogen Pay</span>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Toast Notifications */}
@@ -438,7 +541,6 @@ export default function ProfilePage() {
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
                       <p className="text-sm text-gray-600">Available Credit</p>
-                      {/* <DollarSign className="w-5 h-5 text-green-600" /> */}
                     </div>
                     <p className="text-3xl font-bold text-green-600">
                       ₦{availableCredit.toLocaleString()}
