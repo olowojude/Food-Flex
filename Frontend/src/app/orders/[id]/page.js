@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * COMPLETE FILE - Copy this entire file
- * Location: frontend/src/app/orders/[id]/page.js
- * Purpose: Order detail page with OTP integration for both buyer and seller
- */
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
@@ -26,7 +21,7 @@ function OrderDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const orderId = params.id;
-  const fromScan = searchParams.get('scan') === 'true';
+  const fromScan = searchParams.get('scan') === 'true'; // 
 
   const { user, isAuthenticated, isBuyer, isSeller } = useAuth();
   const [order, setOrder] = useState(null);
@@ -117,7 +112,7 @@ function OrderDetailContent() {
           color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
           icon: <Clock className="w-5 h-5" />,
           message: isSeller 
-            ? 'Order awaiting OTP verification. Ask buyer for their 6-digit code.'
+            ? 'Order awaiting QR scan. Go to Sales page and click "Scan QR Code".'
             : 'Show your QR code and OTP to the seller for verification.'
         };
       case 'CONFIRMED':
@@ -216,6 +211,7 @@ function OrderDetailContent() {
           </p>
         </div>
 
+        {/* Buyer sees OTP when order is PENDING */}
         {isBuyer && order.status === 'PENDING' && (
           <div className="mb-6">
             <OTPDisplay orderId={orderId} orderAPI={orderAPI} />
@@ -226,6 +222,27 @@ function OrderDetailContent() {
           <div className="mb-6">
             <div className="card p-6">
               <OTPInput onSubmit={handleOTPSubmit} loading={confirming} buyerName={order.buyer_name || 'the buyer'} />
+            </div>
+          </div>
+        )}
+
+        {isSeller && !fromScan && order.status === 'PENDING' && (
+          <div className="mb-6">
+            <div className="card p-6 bg-blue-50 border-2 border-blue-200">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-6 h-6 text-blue-600 shrink-0 mt-1" />
+                <div>
+                  <h3 className="font-semibold text-blue-900 mb-2">Action Required: Scan QR Code</h3>
+                  <p className="text-sm text-blue-700 mb-4">
+                    You must scan the buyer's QR code to generate the OTP before you can confirm this order.
+                  </p>
+                  <Link href="/sales">
+                    <Button variant="primary">
+                      Go to Sales Page to Scan QR
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -370,15 +387,10 @@ function OrderDetailContent() {
           </div>
         )}
 
+        {/* REMOVED "Enter OTP" button for pending orders - must scan QR first */}
         {isSeller && (
           <div className="card p-6">
             <div className="space-y-4">
-              {order.status === 'PENDING' && !showOTPInput && (
-                <Button onClick={() => setShowOTPInput(true)} variant="primary" className="w-full text-lg py-4">
-                  <Shield className="w-6 h-6 mr-2" />
-                  Enter OTP to Confirm Order
-                </Button>
-              )}
               {order.status === 'CONFIRMED' && (
                 <Button onClick={handleCompleteOrder} loading={completing} variant="success" className="w-full text-lg py-4">
                   <CheckCircle className="w-6 h-6 mr-2" />

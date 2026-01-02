@@ -1,5 +1,6 @@
 'use client';
 
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -15,7 +16,7 @@ import {
 
 export default function SalesPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading, isSeller } = useAuth();
+  const { user, isAuthenticated, isSeller } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,7 +24,7 @@ export default function SalesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [scanningOrderId, setScanningOrderId] = useState(null);
-  const [processing, setProcessing] = useState(false); 
+  const [processing, setProcessing] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -34,14 +35,14 @@ export default function SalesPage() {
   });
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    if (!isAuthenticated) {
       router.push('/login');
-    } else if (!isLoading && !isSeller) {
+    } else if (!isSeller) {
       router.push('/');
-    } else if (isAuthenticated && isSeller) {
+    } else {
       fetchOrders();
     }
-  }, [isAuthenticated, isLoading, isSeller, router]);
+  }, [isAuthenticated, isSeller]);
 
   const fetchOrders = async () => {
     try {
@@ -81,12 +82,10 @@ export default function SalesPage() {
   };
 
   const handleScanSuccess = async ({ orderData, qrData }) => {
-    
     setShowScanner(false);
     setProcessing(true);
 
     try {
-      // Extract order info from QR code
       const orderId = orderData.order_id || scanningOrderId;
       const orderNumber = orderData.order_number;
 
@@ -94,7 +93,6 @@ export default function SalesPage() {
         throw new Error('Invalid QR code data');
       }
 
-      // Find the order in our list to verify
       const order = orders.find(o => 
         o.id === orderId || o.order_number === orderNumber
       );
@@ -111,11 +109,9 @@ export default function SalesPage() {
         return;
       }
 
-      // Verify with backend
       const response = await orderAPI.verifyQRCode({ qr_data: qrData });
       
       if (response.data.id) {
-        // Success - redirect to order detail with scan flag
         router.push(`/orders/${response.data.id}?scan=true`);
       }
     } catch (error) {
@@ -125,6 +121,7 @@ export default function SalesPage() {
   };
 
   const handleScanError = (error) => {
+    console.error('Scan error:', error);
     setShowScanner(false);
     setProcessing(false);
   };
@@ -135,7 +132,7 @@ export default function SalesPage() {
     try {
       await orderAPI.completeOrder(orderId);
       alert('Order completed successfully!');
-      fetchOrders(); // Refresh orders
+      fetchOrders();
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to complete order');
     }
@@ -173,14 +170,6 @@ export default function SalesPage() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="xl" />
-      </div>
-    );
-  }
-
   if (!isAuthenticated || !isSeller) return null;
 
   if (loading) {
@@ -198,9 +187,7 @@ export default function SalesPage() {
           <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-gray-900 mb-2">Error Loading Orders</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={fetchOrders} variant="primary">
-            Try Again
-          </Button>
+          <Button onClick={fetchOrders} variant="primary">Try Again</Button>
         </div>
       </div>
     );
@@ -208,7 +195,6 @@ export default function SalesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      {/* QR Scanner Modal */}
       {showScanner && (
         <QRScanner
           onScanSuccess={handleScanSuccess}
@@ -222,13 +208,11 @@ export default function SalesPage() {
       )}
 
       <div className="container mx-auto px-4">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Sales & Orders</h1>
           <p className="text-gray-600">Manage your customer orders and track sales</p>
         </div>
 
-        {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -266,7 +250,6 @@ export default function SalesPage() {
           <div className="card p-4 bg-green-50">
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm text-gray-600">Revenue</p>
-              {/* <DollarSign className="w-5 h-5 text-green-600" /> */}
             </div>
             <p className="text-xl font-bold text-green-600">
               ₦{stats.totalRevenue.toLocaleString()}
@@ -274,7 +257,6 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* Pending Orders Alert */}
         {stats.pending > 0 && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
             <div className="flex items-center">
@@ -291,7 +273,6 @@ export default function SalesPage() {
           </div>
         )}
 
-        {/* Search and Filter */}
         <div className="card p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
@@ -328,7 +309,6 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* Orders List */}
         {filteredOrders.length === 0 ? (
           <div className="card p-12 text-center">
             <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -351,7 +331,6 @@ export default function SalesPage() {
                 }`}
               >
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                  {/* Order Info */}
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-lg font-semibold text-gray-900">
@@ -392,21 +371,24 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                          Scan buyer's QR code to confirm.
+                          ⚠️ Scan buyer's QR code to generate OTP and confirm order.
                         </p>
                       </div>
                     )}
                   </div>
 
-                  {/* Actions */}
                   <div className="flex flex-col gap-2 md:w-48">
-                    <Link href={`/orders/${order.id}`}>
-                      <Button variant="secondary" className="w-full">
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Details
-                      </Button>
-                    </Link>
+                    {/* FIXED: Only show "View Details" for non-pending orders */}
+                    {order.status !== 'PENDING' && (
+                      <Link href={`/orders/${order.id}`}>
+                        <Button variant="secondary" className="w-full">
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </Button>
+                      </Link>
+                    )}
 
+                    {/* For PENDING orders, ONLY show Scan QR button */}
                     {order.status === 'PENDING' && (
                       <Button
                         variant="primary"
