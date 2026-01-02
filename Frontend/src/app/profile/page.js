@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
@@ -16,7 +16,7 @@ import {
   Package, ShoppingBag, Eye, Upload, Wallet, Gift
 } from 'lucide-react';
 
-export default function ProfilePage() {
+function ProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated, isLoading, isBuyer, updateUser } = useAuth();
@@ -45,7 +45,7 @@ export default function ProfilePage() {
   useEffect(() => {
     const repaymentStatus = searchParams.get('repayment');
     if (repaymentStatus === 'success') {
-      showToast('🎉 Repayment successful! Your account has been updated.', 'success');
+      showToast('Repayment successful! Your account has been updated.', 'success');
       fetchData(); // Refresh credit data
       
       // Clean up URL
@@ -207,6 +207,9 @@ export default function ProfilePage() {
   const creditLimit = parseFloat(creditAccount?.credit_limit || 0);
   const outstandingBalance = parseFloat(creditAccount?.outstanding_balance || 0);
   const usagePercentage = creditLimit > 0 ? ((outstandingBalance / creditLimit) * 100).toFixed(1) : 0;
+  
+  // Check if full payment for bonus eligibility
+  const isFullPayment = repaymentAmount && Math.abs(parseFloat(repaymentAmount) - outstandingBalance) < 0.01;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -252,14 +255,14 @@ export default function ProfilePage() {
                 </p>
               </div>
 
-              {usagePercentage < 50 && (
+              {isFullPayment && (
                 <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
                   <p className="text-sm text-green-800 flex items-center gap-2">
                     <Gift className="w-4 h-4" />
                     <span className="font-medium">Bonus Alert!</span>
                   </p>
                   <p className="text-xs text-green-700 mt-1">
-                    Get 5% credit limit increase when you repay on time!
+                    Pay full balance within 30 days to get 5% credit limit increase!
                   </p>
                 </div>
               )}
@@ -516,7 +519,7 @@ export default function ProfilePage() {
                           ₦{outstandingBalance.toLocaleString()}
                         </p>
                         <p className="text-green-100 text-sm mb-4">
-                          {usagePercentage < 50 ? '🎉 Repay now to get a 5% credit limit bonus!' : 'Reduce your balance to unlock bonuses'}
+                          Pay FULL balance within 30 days to get 5% credit limit bonus!
                         </p>
                         <Button
                           onClick={() => setShowRepaymentModal(true)}
@@ -527,11 +530,9 @@ export default function ProfilePage() {
                           Repay Loan
                         </Button>
                       </div>
-                      {usagePercentage < 50 && (
-                        <div className="hidden md:block">
-                          <Gift className="w-20 h-20 text-white opacity-20" />
-                        </div>
-                      )}
+                      <div className="hidden md:block">
+                        <Gift className="w-20 h-20 text-white opacity-20" />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -697,5 +698,17 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="xl" />
+      </div>
+    }>
+      <ProfileContent />
+    </Suspense>
   );
 }

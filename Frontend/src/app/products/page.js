@@ -14,9 +14,9 @@ function ProductsContent() {
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
   const [gettingLocation, setGettingLocation] = useState(false);
-  const [locationMode, setLocationMode] = useState(false); // NEW: GPS search mode
-  const [userLocation, setUserLocation] = useState(null); // NEW: User's GPS coordinates
-  const [radiusUsed, setRadiusUsed] = useState(null); // NEW: Search radius used
+  const [locationMode, setLocationMode] = useState(false);
+  const [userLocation, setUserLocation] = useState(null);
+  const [radiusUsed, setRadiusUsed] = useState(null);
   
   const [pagination, setPagination] = useState({
     count: 0,
@@ -89,42 +89,35 @@ function ProductsContent() {
     }
   };
 
-  // NEW: Handle "Products Near Me" GPS search
+  // Handle "Products Near Me" GPS search (SIMPLIFIED)
   const handleNearMe = async () => {
     setGettingLocation(true);
     
     try {
-      // Get user's GPS location
       const location = await getUserLocation();
       setUserLocation(location);
       
-      // Fetch products near user with smart radius expansion
       const response = await searchAPI.getProductsNearMe(
         location.lat,
         location.lng,
-        {
-          radius: 10, // Start with 10km
-          category: filters.category || undefined,
-          min_price: filters.min_price || undefined,
-          max_price: filters.max_price || undefined,
-          sort: 'distance' // Sort by closest first
-        }
+        { radius: 10 }
       );
       
       setProducts(response.data.products);
       setRadiusUsed(response.data.metadata.radius_used);
       setLocationMode(true);
       
-      alert(`Found ${response.data.metadata.total_products} products within ${response.data.metadata.radius_used}km!`);
+      // Simple alert instead of toast
+      alert(`✅ Found ${response.data.metadata.total_products} products within ${response.data.metadata.radius_used}km`);
     } catch (error) {
       console.error('Location error:', error);
-      alert(error.message || 'Failed to get your location. Please enable location access in your browser.');
+      alert(error.message || 'Could not get location. Please enable location access.');
     } finally {
       setGettingLocation(false);
     }
   };
 
-  // NEW: Reset to normal browsing
+  // Reset to normal browsing
   const handleResetLocation = () => {
     setLocationMode(false);
     setUserLocation(null);
@@ -231,8 +224,7 @@ function ProductsContent() {
                     Location-Based Search Active
                   </p>
                   <p className="text-xs text-blue-700">
-                    Your location: {userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)} 
-                    {radiusUsed && ` • Search radius: ${radiusUsed}km`}
+                    Search radius: {radiusUsed}km • Showing nearest products first
                   </p>
                 </div>
               </div>
@@ -457,7 +449,7 @@ function ProductsContent() {
                 </p>
                 <p className="text-gray-400 text-sm mb-4">
                   {locationMode 
-                    ? 'Try browsing all products or expanding your search radius' 
+                    ? 'Try browsing all products' 
                     : 'Try adjusting your filters'}
                 </p>
                 <button

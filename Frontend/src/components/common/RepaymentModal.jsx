@@ -134,7 +134,7 @@ export default function RepaymentModal({
                 </div>
                 <div className="flex-1">
                   <h3 className="font-bold text-purple-900 mb-1">
-                    🎉 Early Repayment Bonus!
+                    Early Repayment Bonus!
                   </h3>
                   <p className="text-sm text-purple-800 mb-2">
                     You're eligible for a <strong>5% credit limit increase</strong> (₦{parseFloat(bonusAmount).toLocaleString()}) if you repay while your usage is below 50%!

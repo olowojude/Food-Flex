@@ -195,7 +195,10 @@ def initiate_buyer_repayment(request):
 def hydrogen_webhook(request):
     """
     Webhook to handle payment confirmation from Hydrogen Pay
-    Applies 5% bonus if payment made within 30 days
+    
+    BONUS RULE: 5% bonus ONLY if:
+    1. Payment made within 30 days of last purchase
+    2. Payment is FULL outstanding balance (not partial)
     """
     try:
         # Verify webhook signature (TODO: implement signature verification)
@@ -221,6 +224,9 @@ def hydrogen_webhook(request):
                 return Response({'message': 'Transaction already processed'}, status=status.HTTP_200_OK)
             
             with transaction.atomic():
+                # Store outstanding balance BEFORE repayment
+                outstanding_before_repayment = credit_account.outstanding_balance
+                
                 # Process the repayment
                 old_balance = credit_account.credit_balance
                 credit_account.process_repayment(amount, credit_account.user)
@@ -232,38 +238,42 @@ def hydrogen_webhook(request):
                 
                 # ============================================
                 # CHECK IF BONUS SHOULD BE APPLIED
-                # Bonus: 5% if repaid within 30 days
+                # Bonus: 5% if FULL payment within 30 days
                 # ============================================
                 bonus_applied = False
                 bonus_amount = 0
                 
-                # Find the most recent PURCHASE transaction (when they borrowed)
-                last_purchase = credit_account.transactions.filter(
-                    transaction_type=CreditTransaction.TransactionType.PURCHASE
-                ).order_by('-created_at').first()
+                # Check if this was a FULL repayment
+                is_full_payment = abs(amount - outstanding_before_repayment) < 0.01  # Allow small rounding differences
                 
-                if last_purchase:
-                    # Calculate days since last purchase
-                    days_since_purchase = (timezone.now() - last_purchase.created_at).days
+                if is_full_payment:
+                    # Find the most recent PURCHASE transaction (when they borrowed)
+                    last_purchase = credit_account.transactions.filter(
+                        transaction_type=CreditTransaction.TransactionType.PURCHASE
+                    ).order_by('-created_at').first()
                     
-                    # Apply bonus if repaying within 30 days (on time)
-                    if days_since_purchase <= 30:
-                        # Apply 5% bonus to credit limit
-                        bonus_amount = credit_account.credit_limit * 0.05
-                        new_limit = credit_account.credit_limit + bonus_amount
-                        credit_account.increase_credit_limit(new_limit, credit_account.user)
-                        bonus_applied = True
+                    if last_purchase:
+                        # Calculate days since last purchase
+                        days_since_purchase = (timezone.now() - last_purchase.created_at).days
                         
-                        # Log bonus transaction
-                        CreditTransaction.objects.create(
-                            credit_account=credit_account,
-                            transaction_type=CreditTransaction.TransactionType.LIMIT_INCREASE,
-                            amount=bonus_amount,
-                            balance_before=credit_account.credit_balance - bonus_amount,
-                            balance_after=credit_account.credit_balance,
-                            description=f"5% bonus for repaying within 30 days (paid after {days_since_purchase} days)",
-                            reference=f"BONUS_{txn_ref}"
-                        )
+                        # Apply bonus if repaying FULL amount within 30 days
+                        if days_since_purchase <= 30:
+                            # Apply 5% bonus to credit limit
+                            bonus_amount = credit_account.credit_limit * 0.05
+                            new_limit = credit_account.credit_limit + bonus_amount
+                            credit_account.increase_credit_limit(new_limit, credit_account.user)
+                            bonus_applied = True
+                            
+                            # Log bonus transaction
+                            CreditTransaction.objects.create(
+                                credit_account=credit_account,
+                                transaction_type=CreditTransaction.TransactionType.LIMIT_INCREASE,
+                                amount=bonus_amount,
+                                balance_before=credit_account.credit_balance - bonus_amount,
+                                balance_after=credit_account.credit_balance,
+                                description=f"5% bonus for full repayment within 30 days (paid after {days_since_purchase} days)",
+                                reference=f"BONUS_{txn_ref}"
+                            )
                 
                 return Response({
                     'message': 'Repayment processed successfully',
