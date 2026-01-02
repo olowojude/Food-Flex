@@ -9,6 +9,9 @@ from .serializers import (
     RepaymentHistorySerializer, CreditLimitIncreaseSerializer,
     CreditLimitHistorySerializer, CreditTransactionSerializer
 )
+from django.conf import settings
+import requests
+import secrets
 
 
 @api_view(['GET'])
@@ -45,6 +48,202 @@ def my_credit_transactions(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
     
     return Response([], status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def initiate_buyer_repayment(request):
+    """
+    Buyer initiates loan repayment via Hydrogen Pay
+    """
+    user = request.user
+    
+    if user.role != 'BUYER':
+        return Response(
+            {'error': 'Only buyers can make repayments'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        credit_account = CreditAccount.objects.get(user=user)
+    except CreditAccount.DoesNotExist:
+        return Response(
+            {'error': 'Credit account not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Validate amount
+    amount = request.data.get('amount')
+    if not amount:
+        return Response(
+            {'error': 'Amount is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        amount = float(amount)
+    except (ValueError, TypeError):
+        return Response(
+            {'error': 'Invalid amount format'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if amount <= 0:
+        return Response(
+            {'error': 'Amount must be greater than zero'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if amount > credit_account.outstanding_balance:
+        return Response(
+            {'error': f'Repayment amount (₦{amount:,.2f}) exceeds outstanding balance (₦{credit_account.outstanding_balance:,.2f})'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Generate unique transaction reference
+    txn_ref = f"REPAY_{user.id}_{timezone.now().strftime('%Y%m%d%H%M%S')}_{secrets.token_hex(4)}"
+    
+    # Prepare Hydrogen Pay request
+    hydrogen_url = "https://api.hydrogenpay.com/bepay/api/v1/Merchant/initiate-payment"
+    
+    payload = {
+        "amount": amount,
+        "email": user.email,
+        "currency": "NGN",
+        "description": f"Loan Repayment - FoodFlex",
+        "meta": f"Repayment for user {user.id}",
+        "callback": f"{settings.FRONTEND_URL}/profile?repayment=success",
+        "customerName": f"{user.first_name} {user.last_name}",
+        "transactionRef": txn_ref
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {settings.HYDROGEN_SECRET_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        response = requests.post(hydrogen_url, json=payload, headers=headers)
+        response.raise_for_status()
+        
+        payment_data = response.json()
+        
+        # Store pending transaction
+        CreditTransaction.objects.create(
+            credit_account=credit_account,
+            transaction_type=CreditTransaction.TransactionType.REPAYMENT,
+            amount=amount,
+            balance_before=credit_account.credit_balance,
+            balance_after=credit_account.credit_balance,  # Will update on webhook
+            description=f"Pending loan repayment via Hydrogen Pay",
+            reference=txn_ref,
+            status='PENDING'  # Add this field to your model if needed
+        )
+        
+        return Response({
+            'message': 'Payment initiated successfully',
+            'payment_url': payment_data.get('data', {}).get('url'),
+            'transaction_ref': txn_ref,
+            'amount': amount
+        }, status=status.HTTP_200_OK)
+        
+    except requests.exceptions.RequestException as e:
+        return Response(
+            {'error': f'Payment gateway error: {str(e)}'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to initiate payment: {str(e)}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+# ============================================
+# HYDROGEN PAY WEBHOOK
+# ============================================
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])  # Webhook from external service
+def hydrogen_webhook(request):
+    """
+    Webhook to handle payment confirmation from Hydrogen Pay
+    """
+    try:
+        # Verify webhook signature (important for security)
+        signature = request.headers.get('x-squad-signature')
+        # TODO: Implement signature verification with your Hydrogen secret
+        
+        data = request.data
+        
+        # Extract payment details
+        status_code = data.get('status')
+        txn_ref = data.get('transactionRef')
+        amount = float(data.get('amount', 0))
+        
+        if status_code != 'success':
+            return Response({'message': 'Payment not successful'}, status=status.HTTP_200_OK)
+        
+        # Find the pending transaction
+        try:
+            txn = CreditTransaction.objects.get(reference=txn_ref)
+            credit_account = txn.credit_account
+            
+            # Check if already processed
+            if txn.description.startswith('Completed'):
+                return Response({'message': 'Transaction already processed'}, status=status.HTTP_200_OK)
+            
+            with transaction.atomic():
+                # Process the repayment
+                old_balance = credit_account.credit_balance
+                credit_account.process_repayment(amount, credit_account.user)
+                
+                # Update transaction
+                txn.balance_after = credit_account.credit_balance
+                txn.description = f"Completed loan repayment via Hydrogen Pay"
+                txn.save()
+                
+                # Check if bonus should be applied
+                usage_percentage = (credit_account.outstanding_balance / credit_account.credit_limit) * 100
+                bonus_applied = False
+                bonus_amount = 0
+                
+                if usage_percentage < 50:
+                    # Apply 5% bonus
+                    bonus_amount = credit_account.credit_limit * 0.05
+                    new_limit = credit_account.credit_limit + bonus_amount
+                    credit_account.increase_credit_limit(new_limit, credit_account.user)
+                    bonus_applied = True
+                    
+                    # Log bonus transaction
+                    CreditTransaction.objects.create(
+                        credit_account=credit_account,
+                        transaction_type=CreditTransaction.TransactionType.LIMIT_INCREASE,
+                        amount=bonus_amount,
+                        balance_before=credit_account.credit_balance - bonus_amount,
+                        balance_after=credit_account.credit_balance,
+                        description=f"5% bonus for maintaining low usage after repayment",
+                        reference=f"BONUS_{txn_ref}"
+                    )
+                
+                return Response({
+                    'message': 'Repayment processed successfully',
+                    'bonus_applied': bonus_applied,
+                    'bonus_amount': bonus_amount
+                }, status=status.HTTP_200_OK)
+                
+        except CreditTransaction.DoesNotExist:
+            return Response(
+                {'error': 'Transaction not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+            
+    except Exception as e:
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 
 
 @api_view(['GET'])

@@ -7,6 +7,9 @@ urlpatterns = [
     path('account/', views.my_credit_account, name='my_credit_account'),
     path('transactions/', views.my_credit_transactions, name='my_credit_transactions'),
     path('repayments/', views.my_repayment_history, name='my_repayment_history'),
+
+    path('initiate-repayment/', views.initiate_buyer_repayment, name='initiate-buyer-repayment'),
+    path('webhook/hydrogen/', views.hydrogen_webhook, name='hydrogen-webhook'),
     
     path('accounts/', views.all_credit_accounts, name='all_credit_accounts'),
     path('accounts/<int:user_id>/', views.credit_account_detail, name='credit_account_detail'),

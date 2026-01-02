@@ -64,7 +64,9 @@ api.interceptors.response.use(
   }
 );
 
+// ============================================
 // AUTHENTICATION
+// ============================================
 export const authAPI = {
   register: (data) => api.post('/accounts/register/', data),
   login: (data) => api.post('/accounts/login/', data),
@@ -80,7 +82,9 @@ export const authAPI = {
   updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
 };
 
-// SHOP - PRODUCTS & CATEGORIES
+// ============================================
+// SHOP - PRODUCTS & CATEGORIES (MERGED - NO DUPLICATE)
+// ============================================
 export const shopAPI = {
   // Categories
   getCategories: () => api.get('/shop/categories/'),
@@ -89,11 +93,11 @@ export const shopAPI = {
   updateCategory: (id, data) => api.put(`/shop/categories/${id}/update/`, data),
   deleteCategory: (id) => api.delete(`/shop/categories/${id}/delete/`),
   
-  // Products
+  // Products (includes store_locations support)
   getProducts: (params) => api.get('/shop/products/', { params }),
   getProduct: (slug) => api.get(`/shop/products/${slug}/`),
   createProduct: (data) => api.post('/shop/products/create/', data),
-  updateProduct: (id, data) => api.put(`/shop/products/${id}/update/`, data),
+  updateProduct: (id, data) => api.patch(`/shop/products/${id}/update/`, data),
   deleteProduct: (id) => api.delete(`/shop/products/${id}/delete/`),
   
   // Seller Inventory
@@ -106,7 +110,50 @@ export const shopAPI = {
   deleteReview: (reviewId) => api.delete(`/shop/reviews/${reviewId}/delete/`),
 };
 
+// ============================================
+// STORE LOCATION API (SELLERS)
+// ============================================
+export const locationAPI = {
+  // Get all store locations for authenticated seller
+  getStoreLocations: () => api.get('/shop/store-locations/'),
+  
+  // Create new store location
+  createStoreLocation: (data) => api.post('/shop/store-locations/', data),
+  
+  // Get specific store location
+  getStoreLocation: (id) => api.get(`/shop/store-locations/${id}/`),
+  
+  // Update store location
+  updateStoreLocation: (id, data) => api.patch(`/shop/store-locations/${id}/`, data),
+  
+  // Delete store location
+  deleteStoreLocation: (id) => api.delete(`/shop/store-locations/${id}/`),
+};
+
+// ============================================
+// LOCATION-BASED SEARCH API (BUYERS)
+// ============================================
+export const searchAPI = {
+  // Get products near user's GPS location
+  getProductsNearMe: (lat, lng, params = {}) => {
+    const queryParams = {
+      lat,
+      lng,
+      radius: params.radius || 10,
+      ...params
+    };
+    return api.get('/shop/products/near-me/', { params: queryParams });
+  },
+  
+  // Get products by city/state (text-based)
+  getProductsByLocation: (params) => {
+    return api.get('/shop/products/by-location/', { params });
+  },
+};
+
+// ============================================
 // CART
+// ============================================
 export const cartAPI = {
   getCart: () => api.get('/orders/cart/'),
   addToCart: (data) => api.post('/orders/cart/add/', data),
@@ -115,7 +162,9 @@ export const cartAPI = {
   clearCart: () => api.delete('/orders/cart/clear/'),
 };
 
-// ORDERS for Buyers & Sellers
+// ============================================
+// ORDERS (BUYERS & SELLERS)
+// ============================================
 export const orderAPI = {
   // Checkout
   checkout: () => api.post('/orders/checkout/'),
@@ -136,7 +185,9 @@ export const orderAPI = {
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
 };
 
+// ============================================
 // CREDITS
+// ============================================
 export const creditAPI = {
   // User Credit
   getMyCreditAccount: () => api.get('/credits/account/'),
@@ -152,7 +203,9 @@ export const creditAPI = {
   getCreditLimitHistory: (params) => api.get('/credits/limit-history/', { params }),
 };
 
+// ============================================
 // ADMIN/MANAGEMENT
+// ============================================
 export const adminAPI = {
   // User Management
   getAllUsers: (params) => api.get('/accounts/users/', { params }),
@@ -168,6 +221,50 @@ export const adminAPI = {
   
   // Orders Management
   getAllOrders: (params) => api.get('/orders/all/', { params }),
+};
+
+// ============================================
+// GEOLOCATION HELPER
+// ============================================
+export const getUserLocation = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error('Geolocation is not supported by your browser'));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        });
+      },
+      (error) => {
+        let message = 'Unable to retrieve location';
+        
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            message = 'Location access denied. Please enable location permissions.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            message = 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            message = 'Location request timed out.';
+            break;
+        }
+        
+        reject(new Error(message));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
+  });
 };
 
 export default api;
