@@ -15,11 +15,11 @@ urlpatterns = [
     path('profile/password/', views.change_password, name='change_password'),
     
     path('profile/business/', views.seller_profile, name='seller_profile'),
-    # path('profile/business/apply/', views.apply_for_seller, name='apply_seller'),
     path('profile/business/update/', views.update_seller_profile, name='update_seller_profile'),
     
     path('users/', views.list_users, name='list_users'),
     path('users/<int:user_id>/', views.user_detail, name='user_detail'),
     path('users/<int:user_id>/update/', views.update_user, name='update_user'),
     path('users/<int:user_id>/delete/', views.delete_user, name='delete_user'),
+
 ]

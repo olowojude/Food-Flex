@@ -1,5 +1,7 @@
 'use client';
 
+// app/inventory/[id]/edit/page.js
+
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';

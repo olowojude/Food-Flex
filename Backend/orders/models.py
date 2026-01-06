@@ -109,7 +109,6 @@ class Order(models.Model):
         limit_choices_to={'role': 'SELLER'}
     )
     
-    # Order Details
     total_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -130,6 +129,17 @@ class Order(models.Model):
     otp_expires_at = models.DateTimeField(blank=True, null=True)
     otp_verified = models.BooleanField(default=False)
     
+    is_cancelled = models.BooleanField(default=False)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cancelled_orders'
+    )
+    cancellation_reason = models.TextField(blank=True, null=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -145,7 +155,8 @@ class Order(models.Model):
             models.Index(fields=['order_number']),
             models.Index(fields=['qr_code_token']),
             models.Index(fields=['status']),
-            models.Index(fields=['otp_code']), 
+            models.Index(fields=['otp_code']),
+            models.Index(fields=['is_cancelled']),
         ]
     
     def __str__(self):
@@ -194,31 +205,25 @@ class Order(models.Model):
             raise Exception(f"QR code generation failed: {str(e)}")
     
     def generate_otp(self):
-        # Generate random 6-digit code
         self.otp_code = ''.join(random.choices(string.digits, k=6))
         self.otp_generated_at = timezone.now()
         self.otp_expires_at = timezone.now() + timedelta(minutes=10)
         self.otp_verified = False
         self.save()
         
-        print(f"🔐 OTP Generated for Order {self.order_number}: {self.otp_code}")  # For debugging
         
         return self.otp_code
     
     def verify_otp(self, otp_input):
-        # Check if OTP exists
         if not self.otp_code:
             return False, "No OTP generated for this order"
         
-        # Check if OTP has expired
         if timezone.now() > self.otp_expires_at:
             return False, "OTP has expired. Please scan QR code again."
         
-        # Check if OTP already used
         if self.otp_verified:
             return False, "OTP already used"
         
-        # Verify OTP code
         if self.otp_code == otp_input:
             self.otp_verified = True
             self.save()
@@ -240,9 +245,90 @@ class Order(models.Model):
         remaining = (self.otp_expires_at - timezone.now()).total_seconds()
         return max(0, int(remaining))
     
+    # Order Cancellation Methods
+    def can_be_cancelled(self):
+        return self.status == self.OrderStatus.PENDING and not self.is_cancelled
+    
+    def cancel_order_by_buyer(self, buyer, reason=None):
+        if not self.can_be_cancelled():
+            return False, "This order cannot be cancelled. Only pending orders can be cancelled.", 0
+        
+        if self.buyer.id != buyer.id:
+            return False, "You can only cancel your own orders.", 0
+        
+        try:
+            from credits.models import CreditTransaction
+            
+            # Mark as cancelled
+            self.status = self.OrderStatus.CANCELLED
+            self.is_cancelled = True
+            self.cancelled_at = timezone.now()
+            self.cancelled_by = buyer
+            self.cancellation_reason = reason or "Cancelled by buyer"
+            
+            # Void the QR code by clearing OTP
+            if self.otp_code:
+                self.clear_otp()
+            
+            # Restore stock for all items
+            for item in self.items.all():
+                if item.product:
+                    item.product.stock_quantity += item.quantity
+                    item.product.save(update_fields=['stock_quantity'])
+            
+            # Refund credit to buyer
+            refund_amount = self.total_amount
+            credit_account = self.buyer.credit_account
+            
+            old_balance = credit_account.credit_balance
+            credit_account.credit_balance += refund_amount
+            credit_account.total_credit_used -= refund_amount
+            
+            # Update loan status if needed
+            if credit_account.loan_status == 'EXHAUSTED':
+                credit_account.loan_status = 'ACTIVE'
+            
+            credit_account.save()
+            
+            # Create refund transaction record
+            CreditTransaction.objects.create(
+                credit_account=credit_account,
+                transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
+                amount=refund_amount,
+                balance_before=old_balance,
+                balance_after=credit_account.credit_balance,
+                description=f"Refund - Order {self.order_number} cancelled: {reason or 'No reason provided'}",
+                reference=self.order_number
+            )
+            
+            # Update notes
+            if reason:
+                self.notes = f"Cancelled by buyer: {reason}"
+            
+            self.save()
+            
+            return True, "Order cancelled successfully. Credit has been refunded to your account.", float(refund_amount)
+            
+        except Exception as e:
+            return False, f"Error cancelling order: {str(e)}", 0
+    
+    def get_cancellation_info(self):
+        if not self.is_cancelled:
+            return None
+        
+        return {
+            'cancelled_at': self.cancelled_at,
+            'cancelled_by': self.cancelled_by.get_full_name() if self.cancelled_by else 'Unknown',
+            'cancelled_by_id': self.cancelled_by.id if self.cancelled_by else None,
+            'reason': self.cancellation_reason or 'No reason provided'
+        }
+    
     def confirm_order(self, confirmed_by_seller):
         if self.status != self.OrderStatus.PENDING:
             raise ValueError(f"Cannot confirm order with status: {self.status}")
+        
+        if self.is_cancelled:
+            raise ValueError("Cannot confirm a cancelled order")
         
         if confirmed_by_seller.id != self.seller.id:
             raise ValueError("Only the assigned seller can confirm this order")
@@ -255,6 +341,9 @@ class Order(models.Model):
         if self.status != self.OrderStatus.CONFIRMED:
             raise ValueError(f"Cannot complete order with status: {self.status}")
         
+        if self.is_cancelled:
+            raise ValueError("Cannot complete a cancelled order")
+        
         self.status = self.OrderStatus.COMPLETED
         self.completed_at = timezone.now()
         self.save()
@@ -262,43 +351,6 @@ class Order(models.Model):
         seller_profile = self.seller.seller_profile
         seller_profile.add_earnings(self.total_amount)
         seller_profile.increment_order_count()
-    
-    def cancel_order(self, reason=''):
-        if self.status in [self.OrderStatus.COMPLETED, self.OrderStatus.CANCELLED]:
-            raise ValueError(f"Cannot cancel order with status: {self.status}")
-        
-        # Restore stock for all items
-        for item in self.items.all():
-            if item.product:  # Check product still exists
-                item.product.stock_quantity += item.quantity
-                item.product.save(update_fields=['stock_quantity'])
-        
-        # Restore buyer's credit
-        credit_account = self.buyer.credit_account
-        credit_account.credit_balance += self.total_amount
-        credit_account.total_credit_used -= self.total_amount
-        
-        if credit_account.loan_status == 'EXHAUSTED':
-            credit_account.loan_status = 'ACTIVE'
-        
-        credit_account.save()
-        
-        # Log credit transaction
-        from credits.models import CreditTransaction
-        CreditTransaction.objects.create(
-            credit_account=credit_account,
-            transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
-            amount=self.total_amount,
-            balance_before=credit_account.credit_balance - self.total_amount,
-            balance_after=credit_account.credit_balance,
-            description=f"Refund - Order {self.order_number} cancelled: {reason}",
-            reference=self.order_number
-        )
-        
-        self.status = self.OrderStatus.CANCELLED
-        if reason:
-            self.notes = f"Cancelled: {reason}"
-        self.save()
 
 
 class OrderItem(models.Model):

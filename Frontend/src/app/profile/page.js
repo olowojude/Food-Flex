@@ -82,7 +82,6 @@ function ProfileContent() {
         setOrders(ordersRes.data.results?.slice(0, 5) || ordersRes.data.slice(0, 5));
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }

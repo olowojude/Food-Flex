@@ -1,5 +1,7 @@
 'use client';
 
+// app/inventory/page.js
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -175,7 +177,7 @@ export default function InventoryPage() {
               <p className="text-gray-600">Manage your products and store locations</p>
             </div>
             <div className="flex gap-3">
-              {/* NEW: Store Locations Button */}
+              {/* Store Locations Button - Links to /inventory/locations */}
               <Link href="/inventory/locations">
                 <button className="bg-purple-600 text-white px-4 py-3 rounded-lg font-medium hover:bg-purple-700 transition flex items-center gap-2">
                   <MapPin className="w-5 h-5" />

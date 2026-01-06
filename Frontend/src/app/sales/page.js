@@ -121,7 +121,6 @@ export default function SalesPage() {
   };
 
   const handleScanError = (error) => {
-    console.error('Scan error:', error);
     setShowScanner(false);
     setProcessing(false);
   };
@@ -371,7 +370,7 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                          ⚠️ Scan buyer's QR code to generate OTP and confirm order.
+                          Scan buyer's QR code to generate OTP and confirm order.
                         </p>
                       </div>
                     )}

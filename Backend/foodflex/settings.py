@@ -214,8 +214,8 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 DEFAULT_CREDIT_LIMIT = 50000 
 CURRENCY_SYMBOL = '₦'
 
-HYDROGEN_SECRET_KEY = os.environ.get('HYDROGEN_SECRET_KEY', 'your-test-key-here')
-HYDROGEN_PUBLIC_KEY = os.environ.get('HYDROGEN_PUBLIC_KEY', 'your-test-public-key')
+HYDROGEN_SECRET_KEY = os.environ.get('HYDROGEN_SECRET_KEY')
+HYDROGEN_PUBLIC_KEY = os.environ.get('HYDROGEN_PUBLIC_KEY')
 
 # For webhook callback
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')

@@ -4,45 +4,6 @@ from accounts.models import User
 from django.conf import settings
 
 
-class StoreLocation(models.Model):
-    """
-    Stores can have multiple pickup locations.
-    Each location has GPS coordinates for distance calculation.
-    """
-    seller = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='store_locations',
-        limit_choices_to={'role': 'SELLER'}
-    )
-    name = models.CharField(max_length=200, help_text="e.g., 'Wuse 2 Branch', 'Main Store'")
-    address = models.TextField()
-    city = models.CharField(max_length=100)
-    state = models.CharField(max_length=100)
-    
-    # GPS Coordinates for distance calculation
-    latitude = models.DecimalField(
-        max_digits=9, 
-        decimal_places=6,
-        help_text="GPS Latitude"
-    )
-    longitude = models.DecimalField(
-        max_digits=9, 
-        decimal_places=6,
-        help_text="GPS Longitude"
-    )
-    
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        ordering = ['-created_at']
-        verbose_name = 'Store Location'
-        verbose_name_plural = 'Store Locations'
-    
-    def __str__(self):
-        return f"{self.seller.first_name}'s Store - {self.name} ({self.city})"
 
 class Category(models.Model):
     name = models.CharField(max_length=255, unique=True)
@@ -94,12 +55,6 @@ class Product(models.Model):
         related_name='products'
     )
 
-    store_locations = models.ManyToManyField(
-        StoreLocation,
-        related_name='products',
-        blank=True,
-        help_text="Select which store locations have this product"
-    )
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=255, unique=True, blank=True)
@@ -194,5 +149,3 @@ class ProductReview(models.Model):
     
     def __str__(self):
         return f"{self.buyer.email} - {self.product.name} - {self.rating}★"
-    
-

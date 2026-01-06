@@ -7,7 +7,7 @@ import { useCart } from '@/context/CartContext';
 import SearchBar from '@/components/common/SearchBar';
 import { 
   ShoppingCart, User, LogOut, Menu, X, 
-  Package, Home, ShoppingBag, Store, Settings
+  Package, Home, ShoppingBag, Store, Settings, MapPin
 } from 'lucide-react';
 
 export default function Navbar() {

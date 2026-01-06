@@ -2,10 +2,11 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { shopAPI, searchAPI, getUserLocation } from '@/lib/api';
+import { shopAPI } from '@/lib/api';
 import ProductCard from '@/components/common/ProductCard';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
-import { Search, Filter, X, ChevronLeft, ChevronRight, MapPin, Navigation } from 'lucide-react';
+import { Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { NIGERIA_STATES } from '@/data/locations';
 
 function ProductsContent() {
   const searchParams = useSearchParams();
@@ -13,11 +14,7 @@ function ProductsContent() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
-  const [gettingLocation, setGettingLocation] = useState(false);
-  const [locationMode, setLocationMode] = useState(false);
-  const [userLocation, setUserLocation] = useState(null);
-  const [radiusUsed, setRadiusUsed] = useState(null);
-  
+
   const [pagination, setPagination] = useState({
     count: 0,
     next: null,
@@ -33,6 +30,7 @@ function ProductsContent() {
     max_price: searchParams.get('max_price') || '',
     in_stock: searchParams.get('in_stock') === 'true',
     ordering: searchParams.get('ordering') || '-created_at',
+    state: searchParams.get('state') || '',
   });
 
   useEffect(() => {
@@ -40,17 +38,14 @@ function ProductsContent() {
   }, []);
 
   useEffect(() => {
-    if (!locationMode) {
-      fetchProducts(1);
-    }
-  }, [filters, locationMode]);
+    fetchProducts(1);
+  }, [filters]);
 
   const fetchCategories = async () => {
     try {
       const response = await shopAPI.getCategories();
       setCategories(response.data);
     } catch (error) {
-      console.error('Failed to fetch categories:', error);
     }
   };
 
@@ -64,6 +59,7 @@ function ProductsContent() {
         ...filters,
       };
 
+      // Remove empty/false values
       Object.keys(params).forEach(key => {
         if (params[key] === '' || params[key] === false) {
           delete params[key];
@@ -83,53 +79,9 @@ function ProductsContent() {
         totalPages,
       });
     } catch (error) {
-      console.error('Failed to fetch products:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Handle "Products Near Me" GPS search (SIMPLIFIED)
-  const handleNearMe = async () => {
-    setGettingLocation(true);
-    
-    try {
-      const location = await getUserLocation();
-      setUserLocation(location);
-      
-      const response = await searchAPI.getProductsNearMe(
-        location.lat,
-        location.lng,
-        { radius: 10 }
-      );
-      
-      setProducts(response.data.products);
-      setRadiusUsed(response.data.metadata.radius_used);
-      setLocationMode(true);
-      
-      // Simple alert instead of toast
-      alert(`✅ Found ${response.data.metadata.total_products} products within ${response.data.metadata.radius_used}km`);
-    } catch (error) {
-      console.error('Location error:', error);
-      alert(error.message || 'Could not get location. Please enable location access.');
-    } finally {
-      setGettingLocation(false);
-    }
-  };
-
-  // Reset to normal browsing
-  const handleResetLocation = () => {
-    setLocationMode(false);
-    setUserLocation(null);
-    setRadiusUsed(null);
-    setPagination({ 
-      count: 0,
-      next: null,
-      previous: null,
-      currentPage: 1, 
-      totalPages: 1 
-    });
-    fetchProducts(1);
   };
 
   const handleFilterChange = (key, value) => {
@@ -144,6 +96,7 @@ function ProductsContent() {
       max_price: '',
       in_stock: false,
       ordering: '-created_at',
+      state: '',
     });
   };
 
@@ -157,79 +110,16 @@ function ProductsContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-6">
-        {/* Header with Location Button */}
+        {/* Header */}
         <div className="mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-                {locationMode ? (
-                  <span className="flex items-center gap-2">
-                    <MapPin className="w-8 h-8 text-blue-600" />
-                    Products Near You
-                  </span>
-                ) : (
-                  'All Products'
-                )}
-              </h1>
-              <p className="text-gray-600">
-                {locationMode && radiusUsed ? (
-                  `Showing products within ${radiusUsed}km of your location`
-                ) : pagination.count > 0 ? (
-                  `${pagination.count} products found`
-                ) : (
-                  'Browse our collection'
-                )}
-              </p>
-            </div>
-            
-            {/* Location Buttons */}
-            <div className="flex gap-2">
-              {!locationMode ? (
-                <button
-                  onClick={handleNearMe}
-                  disabled={gettingLocation}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-sm"
-                >
-                  {gettingLocation ? (
-                    <>
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                      Getting Location...
-                    </>
-                  ) : (
-                    <>
-                      <Navigation className="w-5 h-5" />
-                      Products Near Me
-                    </>
-                  )}
-                </button>
-              ) : (
-                <button
-                  onClick={handleResetLocation}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition font-medium shadow-sm"
-                >
-                  <X className="w-5 h-5" />
-                  Browse All Products
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Location Info Banner */}
-          {locationMode && userLocation && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900 mb-1">
-                    Location-Based Search Active
-                  </p>
-                  <p className="text-xs text-blue-700">
-                    Search radius: {radiusUsed}km • Showing nearest products first
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
+            {filters.state ? `Products in ${filters.state}` : 'All Products'}
+          </h1>
+          <p className="text-gray-600">
+            {pagination.count > 0 
+              ? `${pagination.count} products found` 
+              : 'Browse our collection'}
+          </p>
         </div>
 
         {/* Search and Filter Bar */}
@@ -267,7 +157,6 @@ function ProductsContent() {
               <option value="-price">Price: High to Low</option>
               <option value="name">Name: A to Z</option>
               <option value="-name">Name: Z to A</option>
-              {locationMode && <option value="distance">Distance: Nearest First</option>}
             </select>
           </div>
         </div>
@@ -290,6 +179,7 @@ function ProductsContent() {
               </div>
 
               <div className="space-y-4">
+                {/* Category Filter */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Category
@@ -308,6 +198,26 @@ function ProductsContent() {
                   </select>
                 </div>
 
+                {/* State Filter (NEW) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    State (Location)
+                  </label>
+                  <select
+                    value={filters.state}
+                    onChange={(e) => handleFilterChange('state', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-sm"
+                  >
+                    <option value="">All States</option>
+                    {NIGERIA_STATES.map(state => (
+                      <option key={state.value} value={state.value}>
+                        {state.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Price Range */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Price Range
@@ -330,6 +240,7 @@ function ProductsContent() {
                   </div>
                 </div>
 
+                {/* In Stock Only */}
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -366,22 +277,12 @@ function ProductsContent() {
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
                   {products.map((product) => (
-                    <div key={product.id} className="relative">
-                      <ProductCard product={product} />
-                      
-                      {/* Distance Badge (Location Mode) */}
-                      {locationMode && product.distance_km !== undefined && (
-                        <div className="absolute top-2 left-2 bg-blue-600 text-white text-xs font-medium px-2 py-1 rounded-full shadow-lg flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {product.distance_km}km away
-                        </div>
-                      )}
-                    </div>
+                    <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
 
-                {/* Pagination (only in normal mode) */}
-                {!locationMode && pagination.totalPages > 1 && (
+                {/* Pagination */}
+                {pagination.totalPages > 1 && (
                   <div className="mt-8 flex items-center justify-center gap-2">
                     <button
                       onClick={() => goToPage(pagination.currentPage - 1)}
@@ -432,7 +333,7 @@ function ProductsContent() {
                   </div>
                 )}
 
-                {!locationMode && pagination.totalPages > 0 && (
+                {pagination.totalPages > 0 && (
                   <p className="text-center text-gray-600 text-sm mt-4">
                     Page {pagination.currentPage} of {pagination.totalPages} 
                     ({pagination.count} total products)
@@ -442,21 +343,13 @@ function ProductsContent() {
             ) : (
               <div className="text-center py-20">
                 <X className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500 text-lg mb-2">
-                  {locationMode 
-                    ? 'No products found nearby' 
-                    : 'No products found'}
-                </p>
-                <p className="text-gray-400 text-sm mb-4">
-                  {locationMode 
-                    ? 'Try browsing all products' 
-                    : 'Try adjusting your filters'}
-                </p>
+                <p className="text-gray-500 text-lg mb-2">No products found</p>
+                <p className="text-gray-400 text-sm mb-4">Try adjusting your filters</p>
                 <button
-                  onClick={locationMode ? handleResetLocation : clearFilters}
+                  onClick={clearFilters}
                   className="text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  {locationMode ? 'Browse All Products' : 'Clear filters and try again'}
+                  Clear filters and try again
                 </button>
               </div>
             )}

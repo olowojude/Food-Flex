@@ -1,5 +1,6 @@
 'use client';
 
+// app/invenory/new/page.js
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -11,7 +12,7 @@ import ImageUpload from '@/components/common/ImageUpload';
 import MultipleImageUpload from '@/components/common/MultipleImageUpload';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Toast from '@/components/common/Toast';
-import { ArrowLeft, Save, Package } from 'lucide-react';
+import { ArrowLeft, Save, Package, MapPin, AlertCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function CreateProductPage() {
@@ -23,6 +24,7 @@ export default function CreateProductPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const [toast, setToast] = useState(null);
+  const [locationError, setLocationError] = useState(null); // NEW: Track location error
   
   const [formData, setFormData] = useState({
     name: '',
@@ -126,6 +128,9 @@ export default function CreateProductPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // Clear previous location error
+    setLocationError(null);
+    
     // Validate form
     if (!validateForm()) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -158,9 +163,23 @@ export default function CreateProductPage() {
     } catch (error) {
       const errorData = error.response?.data;
       
-      if (errorData) {
-        setErrors(errorData);
-        showToast('Please check the form for errors', 'error');
+      // ✅ NEW: Check for store location error specifically
+      if (errorData?.error === 'Store location required' || errorData?.message?.includes('store location')) {
+        setLocationError({
+          title: 'Store Location Required',
+          message: errorData.message || 'You must add at least one store location before creating products.',
+        });
+        showToast('Store location required', 'error');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (errorData) {
+        // Handle other form errors
+        if (typeof errorData === 'object' && !errorData.error && !errorData.message) {
+          setErrors(errorData);
+          showToast('Please check the form for errors', 'error');
+        } else {
+          showToast(errorData.error || errorData.message || 'Failed to create product', 'error');
+        }
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         showToast('Failed to create product. Please try again.', 'error');
       }
@@ -202,6 +221,25 @@ export default function CreateProductPage() {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Add New Product</h1>
           <p className="text-gray-600">Fill in the details to add a new product</p>
         </div>
+
+        {/* ✅ NEW: Store Location Error Banner */}
+        {locationError && (
+          <div className="bg-red-50 border-2 border-red-500 rounded-lg p-6 mb-6">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-6 h-6 text-red-600 shrink-0 mt-1" />
+              <div className="flex-1">
+                <h3 className="font-bold text-red-900 text-lg mb-2">{locationError.title}</h3>
+                <p className="text-red-800 mb-4">{locationError.message}</p>
+                <Link href="/inventory/locations">
+                  <Button variant="primary" className="bg-red-600 hover:bg-red-700">
+                    <MapPin className="w-5 h-5 mr-2" />
+                    Add Store Location Now
+                  </Button>
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information Section */}

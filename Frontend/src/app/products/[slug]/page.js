@@ -1,6 +1,5 @@
 'use client';
 
-
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,7 +10,7 @@ import Button from '@/components/common/Button';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import { 
   ArrowLeft, ShoppingCart, Star, Minus, Plus, 
-  Store, MapPin, ShoppingBag
+  Store, MapPin, ShoppingBag, Phone
 } from 'lucide-react';
 
 export default function ProductDetailPage() {
@@ -37,8 +36,9 @@ export default function ProductDetailPage() {
     try {
       setLoading(true);
       const response = await shopAPI.getProduct(params.slug);
-      setProduct(response.data);
-      setSelectedImage(response.data.main_image);
+      const productData = response.data;
+      setProduct(productData);
+      setSelectedImage(productData.main_image);
     } catch (error) {
       setMessage({ type: 'error', text: 'Product not found' });
     } finally {
@@ -107,8 +107,17 @@ export default function ProductDetailPage() {
   const reviewCount = product.reviews?.length || 0;
   const salesCount = product.sales_count || 0;
   
-  const storeName = product.seller_info?.store_name || 'Store';
-  const storeAddress = product.seller_info?.business_address || '';
+  // Extract seller info with primary location
+  const sellerInfo = product.seller_info || {};
+  const primaryLocation = sellerInfo.primary_location;
+  const otherLocations = sellerInfo.other_locations || [];
+  
+  // Use primary location data if available
+  const storeName = primaryLocation?.store_name || sellerInfo.store_name || 'Store';
+  const storePhone = primaryLocation?.phone_number || sellerInfo.phone || '';
+  const storeAddress = primaryLocation?.address || sellerInfo.business_address || '';
+  const storeCity = primaryLocation?.city || sellerInfo.city || '';
+  const storeState = primaryLocation?.state || sellerInfo.state || '';
 
   return (
     <div className="min-h-screen bg-gray-50 py-4">
@@ -215,26 +224,66 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Seller Info */}
             <div className="bg-white rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center gap-3">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Seller Information</h3>
+              
+              {/* Seller Name */}
+              <div className="flex items-start gap-3 mb-3">
                 <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center shrink-0">
                   <Store className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 text-sm truncate">
-                    {storeName}
-                  </h3>
+                  <h4 className="font-semibold text-gray-900 text-sm">
+                    {sellerInfo.first_name || 'Seller'}'s Store
+                  </h4>
                   <p className="text-xs text-gray-500">Verified Seller</p>
                 </div>
               </div>
 
-              <div className="mt-3 p-2 bg-gray-50 rounded text-center">
-                <div className="flex items-center justify-center gap-1 mb-1">
-                  <ShoppingBag className="w-3 h-3 text-green-600" />
-                  <span className="text-xs text-gray-600">Sold</span>
+              {/* Primary Location Information */}
+              {primaryLocation && (
+                <div className="mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="flex items-start gap-2">
+                    <MapPin className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-gray-700 mb-1">Primary Pickup Location</p>
+                      
+                      {/* Store Name */}
+                      <p className="text-sm font-semibold text-gray-900 mb-1">
+                        {storeName}
+                      </p>
+                      
+                      {/* City, State */}
+                      <p className="text-sm text-gray-700 mb-1">
+                        {storeCity}, {storeState}
+                      </p>
+                      
+                      {/* Address */}
+                      {storeAddress && (
+                        <p className="text-xs text-gray-600 mb-2">
+                          {storeAddress}
+                        </p>
+                      )}
+                      
+                      {/* Phone */}
+                      {storePhone && (
+                        <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
+                          <Phone className="w-4 h-4 text-gray-500" />
+                          <p className="text-sm text-gray-700">{storePhone}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-lg font-bold text-gray-900">{salesCount}</p>
+              )}
+
+              {/* Sales Stats */}
+              <div className="p-3 bg-gray-50 rounded-lg text-center">
+                <div className="flex items-center justify-center gap-1 mb-1">
+                  <ShoppingBag className="w-4 h-4 text-green-600" />
+                  <span className="text-xs text-gray-600">Items Sold</span>
+                </div>
+                <p className="text-xl font-bold text-gray-900">{salesCount}</p>
               </div>
             </div>
 
@@ -304,6 +353,60 @@ export default function ProductDetailPage() {
             </div>
           </div>
         </div>
+
+        {/* OTHER PICKUP LOCATIONS */}
+        {otherLocations.length > 0 && (
+          <div className="mt-8">
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-blue-600" />
+                Other Pickup Locations
+              </h2>
+              <p className="text-sm text-gray-600 mb-4">
+                This seller has additional locations where you can pick up your order:
+              </p>
+              
+              <div className="grid md:grid-cols-2 gap-4">
+                {otherLocations.map((location) => (
+                  <div 
+                    key={location.id} 
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-200"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg shrink-0">
+                        <Store className="w-4 h-4 text-blue-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 text-sm mb-1">
+                          {location.store_name}
+                        </h3>
+                        <div className="space-y-1 text-xs text-gray-600">
+                          <p className="flex items-start gap-1">
+                            <MapPin className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span>{location.city}, {location.state}</span>
+                          </p>
+                          {location.address && (
+                            <p className="ml-4">{location.address}</p>
+                          )}
+                          {location.phone_number && (
+                            <p className="flex items-center gap-1">
+                              <Phone className="w-3 h-3" />
+                              <span>{location.phone_number}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-4 p-3 bg-blue-50 rounded border border-blue-200">
+                💡 <strong>Tip:</strong> You can discuss your preferred pickup location with the seller after placing your order.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Reviews */}
         {product.reviews && product.reviews.length > 0 && (

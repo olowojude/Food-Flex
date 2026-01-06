@@ -1,10 +1,5 @@
 'use client';
 
-/**
- * Fixed Authentication Context with Proper Loading State
- * Save as: frontend/src/context/AuthContext.jsx (REPLACE)
- */
-
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Cookies from 'js-cookie';
@@ -29,7 +24,6 @@ export function AuthProvider({ children }) {
           const userData = JSON.parse(storedUser);
           setUser(userData);
         } catch (error) {
-          console.error('Error parsing user from cookies:', error);
           // Clear invalid cookies
           Cookies.remove('user');
           Cookies.remove('access_token');
@@ -74,7 +68,6 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Login failed',
@@ -96,7 +89,6 @@ export function AuthProvider({ children }) {
       router.push('/');
       return { success: true };
     } catch (error) {
-      console.error('Registration error:', error);
       return {
         success: false,
         error: error.response?.data?.error || error.response?.data || 'Registration failed',
@@ -125,7 +117,6 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Update error:', error);
       return {
         success: false,
         error: error.response?.data?.error || 'Update failed',
@@ -143,7 +134,6 @@ export function AuthProvider({ children }) {
       
       return { success: true };
     } catch (error) {
-      console.error('Refresh user error:', error);
       // If refresh fails, user might need to re-login
       if (error.response?.status === 401) {
         logout();

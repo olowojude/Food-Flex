@@ -1,8 +1,10 @@
-# backend/shop/serializers.py
-# REPLACE the entire file with this corrected version
 
 from rest_framework import serializers
-from .models import Category, Product, ProductReview, StoreLocation
+from .models import Category, Product, ProductReview
+from accounts.models import StoreLocation
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -20,30 +22,60 @@ class CategorySerializer(serializers.ModelSerializer):
         return value
 
 
+class StoreLocationSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+    store_name = serializers.CharField(read_only=True)
+    address = serializers.CharField(read_only=True)
+    city = serializers.CharField(read_only=True)
+    state = serializers.CharField(read_only=True)
+    phone_number = serializers.CharField(read_only=True)
+    is_primary = serializers.BooleanField(read_only=True)
+    full_address = serializers.SerializerMethodField()
+    
+    def get_full_address(self, obj):
+        return f"{obj.address}, {obj.city}, {obj.state}, {obj.country}"
+
+
 class SellerInfoSerializer(serializers.Serializer):
     id = serializers.IntegerField(read_only=True)
     email = serializers.EmailField(read_only=True)
     phone = serializers.CharField(source='phone_number', read_only=True)
+    first_name = serializers.CharField(read_only=True)
+    last_name = serializers.CharField(read_only=True)
     store_name = serializers.SerializerMethodField()
     business_name = serializers.SerializerMethodField()
     business_address = serializers.SerializerMethodField()
+    city = serializers.CharField(read_only=True)
+    state = serializers.CharField(read_only=True)
+    
+    primary_location = serializers.SerializerMethodField()
+    other_locations = serializers.SerializerMethodField()
     
     def get_store_name(self, obj):
-        # Try to get from seller profile first
+        # Try to get from primary store location first
+        try:
+            primary_location = obj.store_locations.filter(
+                is_primary=True, 
+                is_active=True
+            ).first()
+            if primary_location:
+                return primary_location.store_name
+        except Exception as e:
+            logger.exception("Error fetching primary location")
+
+        
+        # Fallback to seller profile or generated name
         if hasattr(obj, 'seller_profile') and obj.seller_profile:
             profile = obj.seller_profile
-            # Use the get_store_name method if it exists
             if hasattr(profile, 'get_store_name'):
                 return profile.get_store_name()
-            # Otherwise use business_name
             if profile.business_name:
                 return profile.business_name
         
-        # Fallback to generating from user's first name
+        # Generate from first name or email
         if obj.first_name:
             return f"{obj.first_name}'s Store"
         
-        # Last resort: use email
         return f"{obj.email.split('@')[0]}'s Store"
     
     def get_business_name(self, obj):
@@ -52,64 +84,70 @@ class SellerInfoSerializer(serializers.Serializer):
         return self.get_store_name(obj)
     
     def get_business_address(self, obj):
+        # Try to get from primary store location first
+        try:
+            primary_location = obj.store_locations.filter(
+                is_primary=True, 
+                is_active=True
+            ).first()
+            if primary_location:
+                return primary_location.address
+        except:
+            pass
+        
+        # Fallback to seller profile
         if hasattr(obj, 'seller_profile') and obj.seller_profile:
             if obj.seller_profile.business_address:
                 return obj.seller_profile.business_address
         
-        # Fallback to user address
         if obj.address:
             return obj.address
         
         return "Location not specified"
-
-
-# ============================================
-# STORE LOCATION SERIALIZERS
-# ============================================
-
-class StoreLocationSerializer(serializers.ModelSerializer):
-    """Serializer for store locations"""
-    seller_name = serializers.CharField(source='seller.first_name', read_only=True)
-    product_count = serializers.SerializerMethodField()
     
-    class Meta:
-        model = StoreLocation
-        fields = [
-            'id', 'name', 'address', 'city', 'state',
-            'latitude', 'longitude', 'is_active',
-            'seller', 'seller_name', 'product_count',
-            'created_at'
-        ]
-        read_only_fields = ['seller', 'created_at']
+    def get_primary_location(self, obj):
+        try:
+            primary_location = obj.store_locations.filter(
+                is_primary=True,
+                is_active=True
+            ).first()
+            
+            if primary_location:
+                return StoreLocationSerializer(primary_location).data
+        except Exception as e:
+            logger.exception("Error getting primary location")
+        
+        return None
     
-    def get_product_count(self, obj):
-        """Count products available at this location"""
-        return obj.products.filter(is_active=True, stock_quantity__gt=0).count()
+    def get_other_locations(self, obj):
+        try:
+            other_locations = obj.store_locations.filter(
+                is_primary=False,
+                is_active=True
+            ).order_by('created_at')
+            
+            if other_locations.exists():
+                return StoreLocationSerializer(other_locations, many=True).data
+        except Exception as e:
+            logger.exception("Error getting other locations")        
+        return []
 
-
-class StoreLocationListSerializer(serializers.ModelSerializer):
-    """Minimal serializer for listing store locations"""
-    
-    class Meta:
-        model = StoreLocation
-        fields = ['id', 'name', 'city', 'state']
-
-
-# ============================================
-# PRODUCT SERIALIZERS
-# ============================================
 
 class ProductListSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     seller_name = serializers.SerializerMethodField()
     seller_store_name = serializers.SerializerMethodField()
+    seller_city = serializers.CharField(source='seller.city', read_only=True)
+    seller_state = serializers.CharField(source='seller.state', read_only=True)
     average_rating = serializers.ReadOnlyField()
     
     class Meta:
         model = Product
         fields = [
             'id', 'name', 'slug', 'category', 'category_name',
-            'seller', 'seller_name', 'seller_store_name', 'price', 'formatted_price',
+            'seller', 'seller_name', 'seller_store_name',
+            'seller_city', 'seller_state',
+            'price', 'formatted_price',
             'stock_quantity', 'is_in_stock', 'main_image',
             'weight', 'unit', 'is_featured', 'views_count',
             'sales_count', 'average_rating', 'created_at'
@@ -120,6 +158,18 @@ class ProductListSerializer(serializers.ModelSerializer):
         return obj.seller.get_full_name()
     
     def get_seller_store_name(self, obj):
+        # Try primary location first
+        try:
+            primary_location = obj.seller.store_locations.filter(
+                is_primary=True,
+                is_active=True
+            ).first()
+            if primary_location:
+                return primary_location.store_name
+        except:
+            pass
+        
+        # Fallback to generated name
         if hasattr(obj.seller, 'seller_profile') and obj.seller.seller_profile:
             profile = obj.seller.seller_profile
             if hasattr(profile, 'get_store_name'):
@@ -134,11 +184,8 @@ class ProductListSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    """Main product serializer with location support"""
     category = CategorySerializer(read_only=True)
     seller = serializers.SerializerMethodField()
-    store_locations = StoreLocationListSerializer(many=True, read_only=True)
-    closest_store = serializers.SerializerMethodField()
     average_rating = serializers.ReadOnlyField()
     
     class Meta:
@@ -146,7 +193,7 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'slug', 'description', 'price', 'formatted_price',
             'stock_quantity', 'is_in_stock', 'main_image', 'additional_images',
-            'category', 'seller', 'store_locations', 'closest_store',
+            'category', 'seller',
             'is_active', 'is_featured', 'views_count', 'sales_count',
             'average_rating', 'created_at'
         ]
@@ -157,20 +204,14 @@ class ProductSerializer(serializers.ModelSerializer):
             'store_name': f"{obj.seller.first_name}'s Store" if obj.seller.first_name else f"{obj.seller.email.split('@')[0]}'s Store",
             'email': obj.seller.email,
             'phone_number': obj.seller.phone_number,
+            'city': obj.seller.city,
+            'state': obj.seller.state,
         }
-    
-    def get_closest_store(self, obj):
-        """
-        If user location is in context, return closest store with distance.
-        This is populated by the view when doing location-based search.
-        """
-        return self.context.get('closest_store', None)
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     seller_info = serializers.SerializerMethodField()
-    store_locations = StoreLocationListSerializer(many=True, read_only=True)
     reviews = serializers.SerializerMethodField()
     average_rating = serializers.ReadOnlyField()
     
@@ -181,7 +222,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'seller', 'seller_info', 'price', 'formatted_price', 'stock_quantity',
             'is_in_stock', 'main_image', 'additional_images',
             'weight', 'unit', 'is_active', 'is_featured',
-            'views_count', 'sales_count', 'store_locations',
+            'views_count', 'sales_count',
             'reviews', 'average_rating',
             'created_at', 'updated_at'
         ]
@@ -196,20 +237,13 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
 
 class ProductCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating products (sellers)"""
-    store_locations = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=StoreLocation.objects.filter(is_active=True),
-        required=False
-    )
     
     class Meta:
         model = Product
         fields = [
             'name', 'description', 'category', 'price',
             'stock_quantity', 'main_image', 'additional_images',
-            'weight', 'unit', 'is_active',
-            'store_locations'  # Location support
+            'weight', 'unit', 'is_active'
         ]
     
     def validate_main_image(self, value):
@@ -241,47 +275,7 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
         if not value.is_active:
             raise serializers.ValidationError("Cannot assign product to inactive category")
         return value
-    
-    def validate_store_locations(self, value):
-        """Ensure seller can only assign their own store locations"""
-        user = self.context['request'].user
-        
-        for location in value:
-            if location.seller != user:
-                raise serializers.ValidationError(
-                    "You can only assign your own store locations."
-                )
-        
-        return value
-    
-    def create(self, validated_data):
-        store_locations = validated_data.pop('store_locations', [])
-        product = Product.objects.create(**validated_data)
-        
-        # Assign store locations
-        if store_locations:
-            product.store_locations.set(store_locations)
-        
-        return product
-    
-    def update(self, instance, validated_data):
-        store_locations = validated_data.pop('store_locations', None)
-        
-        # Update basic fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        
-        # Update store locations if provided
-        if store_locations is not None:
-            instance.store_locations.set(store_locations)
-        
-        return instance
 
-
-# ============================================
-# PRODUCT REVIEW SERIALIZERS
-# ============================================
 
 class ProductReviewSerializer(serializers.ModelSerializer):
     buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
