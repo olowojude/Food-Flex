@@ -117,6 +117,8 @@ def product_list(request):
     products = Product.objects.filter(is_active=True).select_related(
         'category', 
         'seller'
+    ).prefetch_related(
+        'seller__store_locations'  # Prefetch store locations
     ).only(
         'id', 'name', 'slug', 'price', 'stock_quantity', 'main_image',
         'weight', 'unit', 'is_featured', 'views_count', 'sales_count', 'created_at',
@@ -167,7 +169,17 @@ def product_list(request):
         products = products.filter(is_featured=True)
     
     if state:
-        products = products.filter(seller__state__iexact=state.strip())
+        state_filter = state.strip()
+        
+        # Get seller IDs that have a primary store location in the specified state
+        sellers_in_state = StoreLocation.objects.filter(
+            is_primary=True,
+            is_active=True,
+            state__iexact=state_filter
+        ).values_list('seller_id', flat=True)
+        
+        # Filter products by those sellers
+        products = products.filter(seller_id__in=sellers_in_state)
     
     # Ordering
     allowed_ordering = [
