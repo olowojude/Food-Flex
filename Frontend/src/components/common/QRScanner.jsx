@@ -126,7 +126,7 @@ const handleQRDetected = (qrData) => {
     const orderCount = orderData.order_ids?.length || 0;
     
     // Show success ONLY after validation passes
-    setSuccess(`QR verified! ${orderCount} order(s) detected.`);
+    setSuccess(`..........`);
     
     // Call parent handler after short delay
     setTimeout(() => {
