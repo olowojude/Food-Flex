@@ -105,14 +105,10 @@ class OrderListSerializer(serializers.ModelSerializer):
 class OrderDetailSerializer(serializers.ModelSerializer):
     buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
     buyer_email = serializers.EmailField(source='buyer.email', read_only=True)
-    buyer_phone = serializers.CharField(source='buyer.phone_number', read_only=True, allow_null=True)
-    buyer_address = serializers.CharField(source='buyer.address', read_only=True, allow_null=True)
+    buyer_phone = serializers.SerializerMethodField()
+    buyer_address = serializers.SerializerMethodField()
     
-    seller_name = serializers.SerializerMethodField()
-    seller_email = serializers.EmailField(source='seller.email', read_only=True)
-    seller_phone = serializers.CharField(source='seller.phone_number', read_only=True, allow_null=True)
-    seller_address = serializers.SerializerMethodField()
-    
+    seller_info = serializers.SerializerMethodField()
     items = OrderItemSerializer(many=True, read_only=True)
     
     class Meta:
@@ -120,23 +116,90 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'order_number', 'buyer', 'seller',
             'buyer_name', 'buyer_email', 'buyer_phone', 'buyer_address',
-            'seller_name', 'seller_email', 'seller_phone', 'seller_address',
+            'seller_info',
             'total_amount', 'status', 'qr_code_token',
             'qr_code_image', 'items', 'notes',
             'created_at', 'confirmed_at', 'completed_at'
         ]
     
-    def get_seller_name(self, obj):
-        if obj.seller.first_name:
-            return f"{obj.seller.first_name}'s Store"
-        return f"{obj.seller.email.split('@')[0]}'s Store"
+    def get_buyer_phone(self, obj):
+        return getattr(obj.buyer, 'phone_number', None)
     
-    def get_seller_address(self, obj):
-        if hasattr(obj.seller, 'seller_profile') and obj.seller.seller_profile.business_address:
-            return obj.seller.seller_profile.business_address
-        if obj.seller.address:
-            return obj.seller.address
-        return "Jos, Plateau State, Nigeria"
+    def get_buyer_address(self, obj):
+        return getattr(obj.buyer, 'address', None)
+    
+    def get_seller_info(self, obj):
+        """Get seller information - simplified and safe version"""
+        seller = obj.seller
+        
+        # Build store name
+        if seller.first_name and seller.last_name:
+            store_name = f"{seller.first_name} {seller.last_name}'s Store"
+        elif seller.first_name:
+            store_name = f"{seller.first_name}'s Store"
+        else:
+            store_name = f"{seller.email.split('@')[0]}'s Store"
+        
+        seller_data = {
+            'id': seller.id,
+            'email': seller.email,
+            'store_name': store_name,
+            'phone_number': getattr(seller, 'phone_number', None),
+        }
+        
+        # Try to get location info safely
+        try:
+            # Default location
+            location_data = {
+                'store_name': store_name,
+                'address': 'Jos, Plateau State, Nigeria',
+                'city': 'Jos',
+                'state': 'Plateau State',
+                'phone_number': getattr(seller, 'phone_number', None),
+                'is_primary': True
+            }
+            
+            # Check if seller has profile
+            if hasattr(seller, 'seller_profile'):
+                profile = seller.seller_profile
+                
+                # Try to get business address from profile
+                if hasattr(profile, 'business_address') and profile.business_address:
+                    location_data['address'] = profile.business_address
+                
+                # Try to get city/state from profile
+                if hasattr(profile, 'city') and profile.city:
+                    location_data['city'] = profile.city
+                
+                if hasattr(profile, 'state') and profile.state:
+                    location_data['state'] = profile.state
+                
+                # Try to get phone from profile
+                if hasattr(profile, 'phone_number') and profile.phone_number:
+                    location_data['phone_number'] = profile.phone_number
+            
+            # Fallback to user's address if available
+            if not hasattr(seller, 'seller_profile') or not location_data['address']:
+                user_address = getattr(seller, 'address', None)
+                if user_address:
+                    location_data['address'] = user_address
+            
+            seller_data['primary_location'] = location_data
+            
+        except Exception as e:
+            # If anything fails, just provide basic info
+            print(f"Warning: Could not get seller location info: {str(e)}")
+            seller_data['primary_location'] = {
+                'store_name': store_name,
+                'address': 'Jos, Plateau State, Nigeria',
+                'city': 'Jos',
+                'state': 'Plateau State',
+                'phone_number': getattr(seller, 'phone_number', None),
+                'is_primary': True
+            }
+        
+        return seller_data
+    
 
 
 class CheckoutSerializer(serializers.Serializer):

@@ -11,13 +11,13 @@ from .serializers import (
     UpdateCartItemSerializer, OrderListSerializer, OrderDetailSerializer,
     ConfirmOrderSerializer, OrderQRCodeSerializer
 )
-from accounts.permissions import IsSeller
+from accounts.permissions import IsSeller, IsBuyer
 import json
 import qrcode
 from io import BytesIO
 import base64
-from django.db import transaction
-
+from collections import defaultdict
+from django.utils import timezone
 
 
 # Cart Views
@@ -32,7 +32,6 @@ def my_cart(request):
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Get or create cart
     cart, created = Cart.objects.get_or_create(user=user)
     serializer = CartSerializer(cart)
     return Response(serializer.data, status=status.HTTP_200_OK)
@@ -65,10 +64,8 @@ def add_to_cart(request):
                 )
             
             with transaction.atomic():
-                # Get or create cart
                 cart, _ = Cart.objects.get_or_create(user=user)
                 
-                # Check if item already in cart
                 cart_item, created = CartItem.objects.get_or_create(
                     cart=cart,
                     product=product,
@@ -76,7 +73,6 @@ def add_to_cart(request):
                 )
                 
                 if not created:
-                    # Update quantity
                     new_quantity = cart_item.quantity + quantity
                     if new_quantity > product.stock_quantity:
                         return Response(
@@ -206,8 +202,6 @@ def clear_cart(request):
         )
 
 
-
-# Order Views
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def checkout(request):
@@ -221,8 +215,9 @@ def checkout(request):
     
     try:
         with transaction.atomic():
-            # Get cart
-            cart = Cart.objects.get(user=user)
+            cart = Cart.objects.prefetch_related(
+                'items__product__seller'
+            ).get(user=user)
             
             if not cart.items.exists():
                 return Response(
@@ -230,13 +225,17 @@ def checkout(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Calculate total
+            # Group cart items by seller
+            items_by_seller = defaultdict(list)
+            for item in cart.items.select_related('product__seller'):
+                seller = item.product.seller
+                items_by_seller[seller].append(item)
+            
+            # Calculate total amount
             total_amount = cart.subtotal
             
-            # Get credit account
+            # Check credit
             credit_account = user.credit_account
-            
-            # Check if user can purchase
             if not credit_account.can_purchase(total_amount):
                 return Response(
                     {
@@ -247,97 +246,108 @@ def checkout(request):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            for cart_item in cart.items.all():
-                cart_item.product.refresh_from_db()
-                
-                if cart_item.quantity > cart_item.product.stock_quantity:
-                    return Response(
-                        {
-                            'error': f'Insufficient stock for {cart_item.product.name}',
-                            'available': cart_item.product.stock_quantity,
-                            'requested': cart_item.quantity
-                        },
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-                
-                success = cart_item.product.reduce_stock(cart_item.quantity)
-                if not success:
-                    return Response(
-                        {
-                            'error': f'Failed to reserve stock for {cart_item.product.name}',
-                            'available': cart_item.product.stock_quantity
-                        },
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
+            # Generate unique checkout session token
+            from django.utils.crypto import get_random_string
+            checkout_session = get_random_string(64)
             
-            first_item = cart.items.first()
-            seller = first_item.product.seller
+            # Create orders for each seller
+            created_orders = []
+            order_ids = []
             
-            order = Order.objects.create(
-                buyer=user,
-                seller=seller,
-                total_amount=total_amount,
-                status=Order.OrderStatus.PENDING
-            )
-            
-            for cart_item in cart.items.all():
-                OrderItem.objects.create(
-                    order=order,
-                    product=cart_item.product,
-                    quantity=cart_item.quantity
+            for seller, seller_items in items_by_seller.items():
+                order_total = sum(
+                    item.product.price * item.quantity 
+                    for item in seller_items
                 )
+                
+                # Create order
+                order = Order.objects.create(
+                    buyer=user,
+                    seller=seller,
+                    total_amount=order_total,
+                    status=Order.OrderStatus.PENDING,
+                    qr_code_token=checkout_session
+                )
+                
+                # Create order items and reduce stock
+                for cart_item in seller_items:
+                    product = cart_item.product
+                    product.refresh_from_db()
+                    
+                    if cart_item.quantity > product.stock_quantity:
+                        raise Exception(
+                            f'Insufficient stock for {product.name}. '
+                            f'Available: {product.stock_quantity}, Requested: {cart_item.quantity}'
+                        )
+                    
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        quantity=cart_item.quantity
+                    )
+                    
+                    success = product.reduce_stock(cart_item.quantity)
+                    if not success:
+                        raise Exception(f'Failed to reserve stock for {product.name}')
+                
+                created_orders.append(order)
+                order_ids.append(order.id)
             
+            # Generate one QR code for all orders
+            qr_data_dict = {
+                'buyer_id': user.id,
+                'order_ids': order_ids,
+                'checkout_session': checkout_session,
+                'timestamp': timezone.now().isoformat()
+            }
+            
+            qr_data_string = json.dumps(qr_data_dict)
+            
+            # Create QR code image
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(qr_data_string)
+            qr.make(fit=True)
+            
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            qr_code_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
+            
+            # Deduct credit
             old_balance = credit_account.credit_balance
             credit_account.deduct_credit(total_amount)
             
+            # Record transaction
             CreditTransaction.objects.create(
                 credit_account=credit_account,
                 transaction_type=CreditTransaction.TransactionType.PURCHASE,
                 amount=total_amount,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"Purchase - Order {order.order_number}",
-                reference=order.order_number
+                description=f"Multi-order purchase - {len(created_orders)} orders",
+                reference=checkout_session
             )
-            
-            # Generate QR code with order information
-            qr_data = json.dumps({
-                'order_id': order.id,
-                'order_number': order.order_number,
-                'total_amount': str(order.total_amount),
-                'buyer_id': user.id,
-                'seller_id': seller.id
-            })
-            
-            # Create QR code image
-            qr = qrcode.QRCode(
-                version=1, 
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,  
-                border=4,  
-            )
-            qr.add_data(qr_data)
-            qr.make(fit=True)
-            
-            # Generate image
-            img = qr.make_image(fill_color="black", back_color="white")
-            
-            # Convert to base64
-            buffer = BytesIO()
-            img.save(buffer, format='PNG')
-            qr_code_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
-            
-            # order.qr_code_token = qr_data  # Store the raw data
-            order.save()
             
             # Clear cart
             cart.clear()
             
+            # Serialize orders
+            serialized_orders = OrderDetailSerializer(created_orders, many=True).data
+            
             return Response(
                 {
-                    'message': 'Order placed successfully',
-                    'order': OrderDetailSerializer(order).data,
-                    'qr_code_base64': qr_code_base64  # This is what frontend needs
+                    'message': f'Checkout successful! {len(created_orders)} order(s) created.',
+                    'orders': serialized_orders,
+                    'order_count': len(created_orders),
+                    'order_ids': order_ids,
+                    'total_amount': float(total_amount),
+                    'qr_code_base64': qr_code_base64,
+                    'checkout_session': checkout_session
                 },
                 status=status.HTTP_201_CREATED
             )
@@ -352,7 +362,7 @@ def checkout(request):
             {'error': str(e)},
             status=status.HTTP_400_BAD_REQUEST
         )
-    
+
 
 @api_view(['POST'])
 @permission_classes([IsSeller])
@@ -366,49 +376,119 @@ def verify_qr_code(request):
         )
     
     try:
-        try:
-            data = json.loads(qr_data)
-            order_id = data.get('order_id')
-            order_number = data.get('order_number')
-        except (json.JSONDecodeError, AttributeError):
-            order_number = qr_data
-            order_id = None
-        
-        # Find the order
-        if order_id:
-            order = Order.objects.get(id=order_id, seller=request.user)
-        elif order_number:
-            order = Order.objects.get(order_number=order_number, seller=request.user)
+        # Parse QR data
+        if isinstance(qr_data, str):
+            try:
+                data = json.loads(qr_data)
+            except json.JSONDecodeError:
+                return Response(
+                    {'error': 'Invalid QR code format. Could not parse JSON.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        elif isinstance(qr_data, dict):
+            data = qr_data
         else:
-            raise Order.DoesNotExist
-        
-        # Check if order is in correct status
-        if order.status not in ['PENDING', 'CONFIRMED']:
             return Response(
-                {'error': f'This order is already {order.status}. Cannot scan again.'},
+                {'error': 'Invalid QR code data type'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Extract required fields
+        buyer_id = data.get('buyer_id')
+        order_ids = data.get('order_ids', [])
+        checkout_session = data.get('checkout_session')
+        
+        # Validate required fields
+        if not buyer_id or not order_ids or not checkout_session:
+            missing = []
+            if not buyer_id:
+                missing.append('buyer_id')
+            if not order_ids:
+                missing.append('order_ids')
+            if not checkout_session:
+                missing.append('checkout_session')
+            
+            return Response(
+                {
+                    'error': 'Invalid QR code. Missing order information.',
+                    'missing_fields': missing
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Ensure order_ids is a list
+        if not isinstance(order_ids, list):
+            order_ids = [order_ids]
+        
+        # Find orders belonging to this seller
+        seller_orders = Order.objects.filter(
+            id__in=order_ids,
+            seller=request.user,
+            qr_code_token=checkout_session
+        ).prefetch_related('items__product')
+        
+        if not seller_orders.exists():
+            return Response(
+                {
+                    'error': 'No orders found',
+                    'message': 'This QR code has no orders for your store.'
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Get first pending order
+        pending_orders = seller_orders.filter(status=Order.OrderStatus.PENDING)
+        
+        if not pending_orders.exists():
+            return Response(
+                {
+                    'error': 'Orders already processed',
+                    'message': 'All orders from this QR code have been processed.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        order = pending_orders.first()
+        
+        # Generate OTP
         otp_code = order.generate_otp()
-
-        # Return order details
+        
+        # Prepare order items
+        items = []
+        for item in order.items.all():
+            items.append({
+                'id': item.id,
+                'product_name': item.product_name,
+                'product_price': str(item.product_price),
+                'quantity': item.quantity,
+                'subtotal': str(item.subtotal),
+                'product_image': item.product.main_image if item.product else None
+            })
+        
+        # Prepare buyer info
+        buyer_info = {
+            'id': order.buyer.id,
+            'name': order.buyer.get_full_name(),
+            'email': order.buyer.email,
+            'phone': getattr(order.buyer, 'phone_number', None)
+        }
+        
         return Response({
-            'id': order.id,
-            'order_number': order.order_number,
-            'status': order.status,
-            'buyer_name': order.buyer.get_full_name(),
-            'buyer_email': order.buyer.email,
-            'total_amount': str(order.total_amount),
-            'items_count': order.items.count(),
-            'otp_generated': True, 
-            'message': 'QR code verified. OTP sent to buyer. Ask buyer for OTP code.'
+            'success': True,
+            'order': {
+                'id': order.id,
+                'order_number': order.order_number,
+                'total_amount': str(order.total_amount),
+                'status': order.status,
+                'items': items,
+                'created_at': order.created_at.isoformat()
+            },
+            'buyer': buyer_info,
+            'otp_generated': True,
+            'otp_expires_in_seconds': order.get_otp_time_remaining(),
+            'message': 'QR code verified! Ask buyer for the 6-digit OTP code.'
         }, status=status.HTTP_200_OK)
         
-    except Order.DoesNotExist:
-        return Response(
-            {'error': 'Invalid QR code or order not found for your store'},
-            status=status.HTTP_404_NOT_FOUND
-        )
     except Exception as e:
         return Response(
             {'error': f'Failed to verify QR code: {str(e)}'},
@@ -452,7 +532,6 @@ def confirm_order(request, order_id):
             status=status.HTTP_403_FORBIDDEN
         )
     
-        # Get OTP from request
     otp_code = request.data.get('otp_code')
     
     if not otp_code:
@@ -473,13 +552,8 @@ def confirm_order(request, order_id):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # OTP verified! Now confirm the order
             order.confirm_order(user)
-            
-            # Clear OTP after successful confirmation
             order.clear_otp()
-            
-            from .serializers import OrderDetailSerializer
             
             return Response(
                 {
@@ -515,7 +589,6 @@ def get_buyer_otp(request, order_id):
     try:
         order = Order.objects.get(id=order_id, buyer=user)
         
-        # Check if OTP exists and not expired
         if not order.otp_code:
             return Response(
                 {
@@ -525,7 +598,6 @@ def get_buyer_otp(request, order_id):
                 status=status.HTTP_200_OK
             )
         
-        # Check if expired
         time_remaining = order.get_otp_time_remaining()
         if time_remaining <= 0:
             return Response(
@@ -537,7 +609,6 @@ def get_buyer_otp(request, order_id):
                 status=status.HTTP_200_OK
             )
         
-        # Check if already used
         if order.otp_verified:
             return Response(
                 {
@@ -548,7 +619,6 @@ def get_buyer_otp(request, order_id):
                 status=status.HTTP_200_OK
             )
         
-        # Return valid OTP
         return Response(
             {
                 'has_otp': True,
@@ -566,6 +636,7 @@ def get_buyer_otp(request, order_id):
             status=status.HTTP_404_NOT_FOUND
         )
 
+
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def complete_order(request, order_id):
@@ -580,8 +651,6 @@ def complete_order(request, order_id):
     try:
         with transaction.atomic():
             order = Order.objects.get(id=order_id, seller=user)
-            
-            # Complete order
             order.complete_order()
             
             return Response(
@@ -609,28 +678,24 @@ def complete_order(request, order_id):
 def my_orders(request):
     user = request.user
     
-    # Determine which orders to fetch based on role
     if user.role == 'BUYER':
-        orders = Order.objects.filter(buyer=user).select_related('seller', 'buyer').prefetch_related('items__product')
+        orders = Order.objects.filter(buyer=user)
     elif user.role == 'SELLER':
-        orders = Order.objects.filter(seller=user).select_related('seller', 'buyer').prefetch_related('items__product')
+        orders = Order.objects.filter(seller=user)
     elif user.is_admin_user:
-        orders = Order.objects.all().select_related('seller', 'buyer').prefetch_related('items__product')
+        orders = Order.objects.all()
     else:
         return Response(
             {'error': 'Invalid user role'},
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Order by newest first
-    orders = orders.order_by('-created_at')
+    orders = orders.select_related('seller', 'buyer').prefetch_related('items__product').order_by('-created_at')
     
-    # Filter by status if provided
     order_status = request.query_params.get('status')
     if order_status:
         orders = orders.filter(status=order_status.upper())
     
-    # Pagination
     paginator = PageNumberPagination()
     paginator.page_size = 20
     paginated_orders = paginator.paginate_queryset(orders, request)
@@ -646,7 +711,6 @@ def my_orders(request):
     }, status=status.HTTP_200_OK)
 
 
-# Keep seller_orders for backward compatibility, but make it use my_orders logic
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def seller_orders(request):
@@ -659,7 +723,6 @@ def order_detail(request, order_id):
     user = request.user
     
     try:
-        # Users can only view their own orders
         if user.role == 'BUYER':
             order = Order.objects.get(id=order_id, buyer=user)
         elif user.role == 'SELLER':
@@ -682,7 +745,6 @@ def order_detail(request, order_id):
         )
 
 
-# Admin Views
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_orders(request):
@@ -694,12 +756,10 @@ def all_orders(request):
     
     orders = Order.objects.all()
     
-    # Filter by status
     order_status = request.query_params.get('status')
     if order_status:
         orders = orders.filter(status=order_status)
     
-    # Pagination
     paginator = PageNumberPagination()
     paginator.page_size = 20
     paginated_orders = paginator.paginate_queryset(orders, request)

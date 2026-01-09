@@ -163,7 +163,7 @@ export default function CreateProductPage() {
     } catch (error) {
       const errorData = error.response?.data;
       
-      // ✅ NEW: Check for store location error specifically
+      //   NEW: Check for store location error specifically
       if (errorData?.error === 'Store location required' || errorData?.message?.includes('store location')) {
         setLocationError({
           title: 'Store Location Required',
@@ -222,7 +222,7 @@ export default function CreateProductPage() {
           <p className="text-gray-600">Fill in the details to add a new product</p>
         </div>
 
-        {/* ✅ NEW: Store Location Error Banner */}
+        {/*   NEW: Store Location Error Banner */}
         {locationError && (
           <div className="bg-red-50 border-2 border-red-500 rounded-lg p-6 mb-6">
             <div className="flex items-start gap-3">

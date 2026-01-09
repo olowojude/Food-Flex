@@ -151,7 +151,7 @@ export default function StoreLocationsPage() {
       return;
     }
 
-    // ✅ PREPARE DATA
+    //   PREPARE DATA
     const cleanData = {
       store_name: formData.store_name.trim(),
       country: formData.country.trim(),

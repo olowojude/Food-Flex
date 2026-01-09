@@ -1,6 +1,5 @@
 'use client';
 
-
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -9,9 +8,10 @@ import { orderAPI } from '@/lib/api';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Button from '@/components/common/Button';
 import QRScanner from '@/components/common/QRScanner';
+import Toast from '@/components/common/Toast';
 import { 
-  Package, DollarSign, ShoppingBag, TrendingUp, 
-  CheckCircle, Clock, XCircle, Search, Eye, Check, AlertCircle, Camera
+  Package, ShoppingBag, 
+  CheckCircle, Clock, XCircle, Search, Eye, AlertCircle, Camera
 } from 'lucide-react';
 
 export default function SalesPage() {
@@ -25,6 +25,7 @@ export default function SalesPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [scanningOrderId, setScanningOrderId] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [toast, setToast] = useState(null);
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -43,6 +44,10 @@ export default function SalesPage() {
       fetchOrders();
     }
   }, [isAuthenticated, isSeller]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   const fetchOrders = async () => {
     try {
@@ -76,46 +81,48 @@ export default function SalesPage() {
     setStats(stats);
   };
 
-  const handleScanClick = (orderId) => {
+  const handleScanClick = (orderId = null) => {
     setScanningOrderId(orderId);
     setShowScanner(true);
   };
 
+  // FIXED handleScanSuccess function
   const handleScanSuccess = async ({ orderData, qrData }) => {
+    // console.log('Scan Success - orderData:', orderData);
+    
     setShowScanner(false);
     setProcessing(true);
 
     try {
-      const orderId = orderData.order_id || scanningOrderId;
-      const orderNumber = orderData.order_number;
-
-      if (!orderId && !orderNumber) {
-        throw new Error('Invalid QR code data');
-      }
-
-      const order = orders.find(o => 
-        o.id === orderId || o.order_number === orderNumber
-      );
-
-      if (!order) {
-        alert('This QR code does not match any of your orders!');
-        setProcessing(false);
-        return;
-      }
-
-      if (order.status !== 'PENDING') {
-        alert(`This order is already ${order.status}. Cannot scan again.`);
-        setProcessing(false);
-        return;
-      }
-
-      const response = await orderAPI.verifyQRCode({ qr_data: qrData });
+      // Send QR data to backend for verification
+      // console.log('Sending to backend:', JSON.stringify(orderData));
       
-      if (response.data.id) {
-        router.push(`/orders/${response.data.id}?scan=true`);
+      const response = await orderAPI.verifyQRCode({ 
+        qr_data: JSON.stringify(orderData) 
+      });
+      
+      // console.log('Backend response:', response.data);
+      
+      if (response.data.success && response.data.order) {
+        const orderId = response.data.order.id;
+        
+        showToast('QR verified! OTP generated. Redirecting...', 'success');
+        
+        //  REDIRECT TO ORDER DETAIL PAGE with scan flag
+        setTimeout(() => {
+          router.push(`/orders/${orderId}?scan=true`);
+        }, 1000);
+      } else {
+        throw new Error('QR verification failed');
       }
+      
     } catch (error) {
-      alert(error.response?.data?.error || error.message || 'Invalid QR code. Please try again.');
+      // console.error('Scan error:', error);
+      const errorMsg = error.response?.data?.error || 
+                       error.response?.data?.message || 
+                       error.message || 
+                       'Invalid QR code';
+      showToast(errorMsg, 'error');
       setProcessing(false);
     }
   };
@@ -123,6 +130,7 @@ export default function SalesPage() {
   const handleScanError = (error) => {
     setShowScanner(false);
     setProcessing(false);
+    showToast(error.message || 'Scan failed', 'error');
   };
 
   const handleCompleteOrder = async (orderId) => {
@@ -130,10 +138,10 @@ export default function SalesPage() {
 
     try {
       await orderAPI.completeOrder(orderId);
-      alert('Order completed successfully!');
+      showToast('Order completed successfully!', 'success');
       fetchOrders();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to complete order');
+      showToast(error.response?.data?.error || 'Failed to complete order', 'error');
     }
   };
 
@@ -194,6 +202,8 @@ export default function SalesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      
       {showScanner && (
         <QRScanner
           onScanSuccess={handleScanSuccess}
@@ -212,6 +222,7 @@ export default function SalesPage() {
           <p className="text-gray-600">Manage your customer orders and track sales</p>
         </div>
 
+        {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
           <div className="card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -227,7 +238,7 @@ export default function SalesPage() {
               <Clock className="w-5 h-5 text-yellow-600" />
             </div>
             <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-            <p className="text-xs text-yellow-700 mt-1">⚠️ Needs Action</p>
+            <p className="text-xs text-yellow-700 mt-1">Needs Action</p>
           </div>
 
           <div className="card p-4">
@@ -256,6 +267,7 @@ export default function SalesPage() {
           </div>
         </div>
 
+        {/* Pending Orders Alert */}
         {stats.pending > 0 && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
             <div className="flex items-center">
@@ -272,6 +284,7 @@ export default function SalesPage() {
           </div>
         )}
 
+        {/* Search and Filters */}
         <div className="card p-4 mb-6">
           <div className="flex flex-col md:flex-row gap-4">
             <div className="flex-1 relative">
@@ -308,6 +321,7 @@ export default function SalesPage() {
           </div>
         </div>
 
+        {/* Orders List */}
         {filteredOrders.length === 0 ? (
           <div className="card p-12 text-center">
             <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -370,24 +384,14 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                          Scan buyer's QR code to generate OTP and confirm order.
+                           Scan buyer's QR code to generate OTP and confirm order.
                         </p>
                       </div>
                     )}
                   </div>
 
+                  {/* Action Buttons */}
                   <div className="flex flex-col gap-2 md:w-48">
-                    {/* FIXED: Only show "View Details" for non-pending orders */}
-                    {order.status !== 'PENDING' && (
-                      <Link href={`/orders/${order.id}`}>
-                        <Button variant="secondary" className="w-full">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </Button>
-                      </Link>
-                    )}
-
-                    {/* For PENDING orders, ONLY show Scan QR button */}
                     {order.status === 'PENDING' && (
                       <Button
                         variant="primary"
@@ -401,20 +405,31 @@ export default function SalesPage() {
                     )}
 
                     {order.status === 'CONFIRMED' && (
-                      <Button
-                        variant="success"
-                        onClick={() => handleCompleteOrder(order.id)}
-                        className="w-full"
-                      >
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Complete Order
-                      </Button>
+                      <>
+                        <Link href={`/orders/${order.id}`}>
+                          <Button variant="secondary" className="w-full">
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Details
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="success"
+                          onClick={() => handleCompleteOrder(order.id)}
+                          className="w-full"
+                        >
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Complete Order
+                        </Button>
+                      </>
                     )}
 
-                    {order.status === 'COMPLETED' && (
-                      <div className="text-center text-sm text-green-600 font-medium py-2">
-                        ✓ Order Fulfilled
-                      </div>
+                    {(order.status === 'COMPLETED' || order.status === 'CANCELLED') && (
+                      <Link href={`/orders/${order.id}`}>
+                        <Button variant="secondary" className="w-full">
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Details
+                        </Button>
+                      </Link>
                     )}
                   </div>
                 </div>

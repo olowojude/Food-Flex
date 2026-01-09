@@ -34,5 +34,5 @@ class Command(BaseCommand):
             
         except Exception as e:
             self.stdout.write(
-                self.style.ERROR(f'❌ Error creating superuser: {str(e)}')
+                self.style.ERROR(f'  Error creating superuser: {str(e)}')
             )

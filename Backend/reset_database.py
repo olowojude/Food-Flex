@@ -12,4 +12,3 @@
 #     cursor.execute("GRANT ALL ON SCHEMA public TO postgres;")
 #     cursor.execute("GRANT ALL ON SCHEMA public TO public;")
     
-# print("✅ Database cleared successfully!")

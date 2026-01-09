@@ -15,16 +15,13 @@ import requests
 import secrets
 
 
-# ============================================
+
 # BUYER ENDPOINTS - Self-Service
-# ============================================
+# Get logged-in buyer's credit account details
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_account(request):
-    """
-    Get logged-in buyer's credit account details
-    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -38,12 +35,11 @@ def my_credit_account(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+#Get logged-in buyer's credit transactions
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_credit_transactions(request):
-    """
-    Get logged-in buyer's credit transactions
-    """
+
     user = request.user
     
     if user.role != 'BUYER':
@@ -60,12 +56,10 @@ def my_credit_transactions(request):
     return Response([], status=status.HTTP_200_OK)
 
 
+# Get logged-in buyer's repayment history
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_repayment_history(request):
-    """
-    Get logged-in buyer's repayment history
-    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -82,12 +76,10 @@ def my_repayment_history(request):
     return Response([], status=status.HTTP_200_OK)
 
 
+# Initiate repayment
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def initiate_buyer_repayment(request):
-    """
-    Buyer initiates loan repayment via Hydrogen Pay (Self-Service Only)
-    """
     user = request.user
     
     if user.role != 'BUYER':
@@ -189,17 +181,10 @@ def initiate_buyer_repayment(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-
+# Hydrogen Pay Webhook 
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def hydrogen_webhook(request):
-    """
-    Webhook to handle payment confirmation from Hydrogen Pay
-    
-    BONUS RULE: 5% bonus ONLY if:
-    1. Payment made within 30 days of last purchase
-    2. Payment is FULL outstanding balance (not partial)
-    """
     try:
         # Verify webhook signature (TODO: implement signature verification)
         signature = request.headers.get('x-squad-signature')
@@ -236,10 +221,8 @@ def hydrogen_webhook(request):
                 txn.description = "Completed loan repayment via Hydrogen Pay"
                 txn.save()
                 
-                # ============================================
                 # CHECK IF BONUS SHOULD BE APPLIED
                 # Bonus: 5% if FULL payment within 30 days
-                # ============================================
                 bonus_applied = False
                 bonus_amount = 0
                 
@@ -294,16 +277,11 @@ def hydrogen_webhook(request):
         )
 
 
-# ============================================
 # ADMIN ENDPOINTS - Read-Only Monitoring
-# ============================================
-
+# View all credit accounts 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_accounts(request):
-    """
-    Admin views all credit accounts (monitoring only)
-    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all credit accounts'},
@@ -320,13 +298,10 @@ def all_credit_accounts(request):
     serializer = CreditAccountSerializer(queryset, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
-
+# View specific user's credit account details
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def credit_account_detail(request, user_id):
-    """
-    Admin views specific user's credit account (monitoring only)
-    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit account details'},
@@ -344,12 +319,10 @@ def credit_account_detail(request, user_id):
         )
 
 
+# Increase a user's credit limit
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def increase_credit_limit(request, user_id):
-    """
-    Admin increases user's credit limit (promotional/reward purposes)
-    """
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can increase credit limits'},
@@ -409,12 +382,11 @@ def increase_credit_limit(request, user_id):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# View all repayment history
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_repayment_history(request):
-    """
-    Admin views all repayment history (reporting/analytics)
-    """
+
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view all repayment history'},
@@ -426,12 +398,11 @@ def all_repayment_history(request):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
+# View all credit limit change history
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def all_credit_limit_history(request):
-    """
-    Admin views credit limit history (audit trail)
-    """
+
     if not request.user.is_admin_user:
         return Response(
             {'error': 'Only admins can view credit limit history'},

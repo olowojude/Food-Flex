@@ -1,10 +1,5 @@
-'use client';
-
-
 import { useState, useEffect, useRef } from 'react';
 import { X, Camera, Upload, AlertCircle, CheckCircle } from 'lucide-react';
-import Button from './Button';
-import LoadingSpinner from './LoadingSpinner';
 
 export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = null }) {
   const [scanning, setScanning] = useState(false);
@@ -18,7 +13,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
   const jsQRRef = useRef(null);
 
   useEffect(() => {
-    // Load jsQR library dynamically
     loadJsQR();
     
     return () => {
@@ -55,10 +49,9 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
 
-        // Start scanning loop
         scanIntervalRef.current = setInterval(() => {
           captureAndDecode();
-        }, 300); // Scan every 300ms
+        }, 300);
       }
     } catch (err) {
       setError('Failed to access camera. Please grant camera permission or try uploading an image.');
@@ -92,17 +85,13 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
 
     if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
 
-    // Set canvas size to video size
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    // Draw video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Get image data
     const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-    // Decode QR code using jsQR
     const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
       inversionAttempts: "dontInvert",
     });
@@ -112,45 +101,44 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
     }
   };
 
-  const handleQRDetected = (qrData) => {
+  // CRITICAL: This handles the multi-seller QR format validation
+const handleQRDetected = (qrData) => {
+  // Stop camera immediately
+  stopCamera();
+  setProcessing(true);
 
-    // Stop camera immediately
-    stopCamera();
-    setProcessing(true);
-
+  try {
+    // Parse JSON QR data
+    let orderData;
     try {
-      // Parse JSON QR data
-      let orderData;
-      try {
-        orderData = JSON.parse(qrData);
-      } catch (e) {
-        // If not JSON, show error
-        throw new Error('Invalid QR code format. This does not appear to be a FoodFlex order QR code.');
-      }
-
-      // Validate required fields
-      if (!orderData.order_id && !orderData.order_number) {
-        throw new Error('Invalid QR code. Missing order information.');
-      }
-
-      // Check if this matches expected order (if provided)
-      if (expectedOrderId && orderData.order_id !== expectedOrderId) {
-        throw new Error('This QR code is for a different order!');
-      }
-
-      // Success!
-      setSuccess(`Order #${orderData.order_number} detected!`);
-      
-      // Delay slightly to show success message
-      setTimeout(() => {
-        onScanSuccess({ orderData, qrData });
-      }, 1000);
-
-    } catch (err) {
-      setError(err.message);
-      setProcessing(false);
+      orderData = JSON.parse(qrData);
+    } catch (e) {
+      throw new Error('Invalid QR code format. Not a FoodFlex order QR code.');
     }
-  };
+
+    // Validate QR format
+    const hasMultiSellerFormat = orderData.buyer_id && orderData.order_ids && orderData.checkout_session;
+    
+    if (!hasMultiSellerFormat) {
+      throw new Error('Invalid QR code format. Missing required order information.');
+    }
+
+    const orderCount = orderData.order_ids?.length || 0;
+    
+    // Show success ONLY after validation passes
+    setSuccess(`QR verified! ${orderCount} order(s) detected.`);
+    
+    // Call parent handler after short delay
+    setTimeout(() => {
+      onScanSuccess({ orderData, qrData });
+    }, 1000);
+
+  } catch (err) {
+    //  Show error state with red X
+    setError(err.message);
+    setProcessing(false);
+  }
+};
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -166,7 +154,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
       setSuccess(null);
       setProcessing(true);
 
-      // Create image element
       const img = new Image();
       const reader = new FileReader();
 
@@ -175,7 +162,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
       };
 
       img.onload = () => {
-        // Draw image to canvas
         const canvas = canvasRef.current;
         const context = canvas.getContext('2d');
         
@@ -183,10 +169,8 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
         canvas.height = img.height;
         context.drawImage(img, 0, 0);
 
-        // Get image data
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Decode QR code
         const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
           inversionAttempts: "dontInvert",
         });
@@ -201,6 +185,11 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
 
       img.onerror = () => {
         setError('Failed to load image. Please try another file.');
+        setProcessing(false);
+      };
+
+      reader.onerror = () => {
+        setError('Failed to read file. Please try again.');
         setProcessing(false);
       };
 
@@ -247,14 +236,13 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
               </p>
 
               <div className="space-y-3">
-                <Button
+                <button
                   onClick={startCamera}
-                  variant="primary"
-                  className="w-full text-lg py-4"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-4 px-6 rounded-lg transition flex items-center justify-center gap-2 text-lg"
                 >
-                  <Camera className="w-6 h-6 mr-2" />
+                  <Camera className="w-6 h-6" />
                   Start Camera
-                </Button>
+                </button>
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -272,8 +260,8 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
                     onChange={handleFileUpload}
                     className="hidden"
                   />
-                  <div className="btn-secondary w-full cursor-pointer text-center py-4 text-lg">
-                    <Upload className="w-6 h-6 mr-2 inline" />
+                  <div className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-4 px-6 rounded-lg cursor-pointer text-center transition flex items-center justify-center gap-2">
+                    <Upload className="w-6 h-6" />
                     Upload QR Image
                   </div>
                 </label>
@@ -285,7 +273,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
           {scanning && !processing && (
             <div className="text-center">
               <div className="relative mx-auto" style={{ maxWidth: '400px' }}>
-                {/* Video Preview */}
                 <video
                   ref={videoRef}
                   className="w-full rounded-lg bg-black"
@@ -293,16 +280,13 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
                   muted
                 />
 
-                {/* Scanning Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="relative w-64 h-64">
-                    {/* Corner brackets */}
                     <div className="absolute top-0 left-0 w-12 h-12 border-t-4 border-l-4 border-blue-500 rounded-tl-lg"></div>
                     <div className="absolute top-0 right-0 w-12 h-12 border-t-4 border-r-4 border-blue-500 rounded-tr-lg"></div>
                     <div className="absolute bottom-0 left-0 w-12 h-12 border-b-4 border-l-4 border-blue-500 rounded-bl-lg"></div>
                     <div className="absolute bottom-0 right-0 w-12 h-12 border-b-4 border-r-4 border-blue-500 rounded-br-lg"></div>
 
-                    {/* Scanning line */}
                     <div className="absolute inset-0 overflow-hidden">
                       <div className="w-full h-1 bg-blue-500 animate-scan"></div>
                     </div>
@@ -314,25 +298,24 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
                 Point camera at QR code...
               </p>
 
-              <Button
+              <button
                 onClick={stopCamera}
-                variant="secondary"
-                className="mt-4"
+                className="mt-4 px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg transition"
               >
                 Cancel Scan
-              </Button>
+              </button>
             </div>
           )}
 
           {/* Processing State */}
           {processing && !success && !error && (
             <div className="text-center py-12">
-              <LoadingSpinner size="xl" />
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
               <p className="mt-4 text-gray-600">Verifying QR code...</p>
             </div>
           )}
 
-          {/* Success State */}
+          {/* Success State - GREEN CHECKMARK (Only shows for VALID QR) */}
           {success && (
             <div className="text-center space-y-4">
               <div className="w-20 h-20 mx-auto bg-green-100 rounded-full flex items-center justify-center">
@@ -341,16 +324,16 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  QR Code Verified!
+                  QR Code Detected!
                 </h3>
                 <p className="text-green-600">{success}</p>
               </div>
 
-              <p className="text-sm text-gray-500">Redirecting to order details...</p>
+              <p className="text-sm text-gray-500">Processing order...</p>
             </div>
           )}
 
-          {/* Error State */}
+          {/* Error State - RED X (Shows for INVALID QR) */}
           {error && (
             <div className="text-center space-y-4">
               <div className="w-20 h-20 mx-auto bg-red-100 rounded-full flex items-center justify-center">
@@ -361,20 +344,19 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   Scan Failed
                 </h3>
-                <p className="text-red-600">{error}</p>
+                <p className="text-red-600 text-sm">{error}</p>
               </div>
 
               <div className="flex gap-3">
-                <Button
+                <button
                   onClick={() => {
                     setError(null);
                     startCamera();
                   }}
-                  variant="primary"
-                  className="flex-1"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition"
                 >
                   Try Camera Again
-                </Button>
+                </button>
                 <label className="flex-1">
                   <input
                     type="file"
@@ -382,7 +364,7 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
                     onChange={handleFileUpload}
                     className="hidden"
                   />
-                  <div className="btn-secondary w-full cursor-pointer text-center">
+                  <div className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2 px-4 rounded-lg cursor-pointer text-center transition">
                     Upload Image
                   </div>
                 </label>
@@ -390,7 +372,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
             </div>
           )}
 
-          {/* Hidden canvas for processing */}
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
@@ -402,7 +383,6 @@ export default function QRScanner({ onScanSuccess, onClose, expectedOrderId = nu
         </div>
       </div>
 
-      {/* Custom CSS for scanning animation */}
       <style jsx>{`
         @keyframes scan {
           0% {
