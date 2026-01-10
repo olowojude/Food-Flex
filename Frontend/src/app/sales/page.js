@@ -88,20 +88,17 @@ export default function SalesPage() {
 
   // FIXED handleScanSuccess function
   const handleScanSuccess = async ({ orderData, qrData }) => {
-    // console.log('Scan Success - orderData:', orderData);
     
     setShowScanner(false);
     setProcessing(true);
 
     try {
       // Send QR data to backend for verification
-      // console.log('Sending to backend:', JSON.stringify(orderData));
       
       const response = await orderAPI.verifyQRCode({ 
         qr_data: JSON.stringify(orderData) 
       });
       
-      // console.log('Backend response:', response.data);
       
       if (response.data.success && response.data.order) {
         const orderId = response.data.order.id;
@@ -117,7 +114,6 @@ export default function SalesPage() {
       }
       
     } catch (error) {
-      // console.error('Scan error:', error);
       const errorMsg = error.response?.data?.error || 
                        error.response?.data?.message || 
                        error.message || 

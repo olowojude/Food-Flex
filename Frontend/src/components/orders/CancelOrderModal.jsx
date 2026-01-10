@@ -13,7 +13,6 @@ export default function CancelOrderModal({ order, isOpen, onClose, onConfirm }) 
       setReason('');
       onClose();
     } catch (error) {
-      console.error('Error cancelling order:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -49,7 +48,7 @@ export default function CancelOrderModal({ order, isOpen, onClose, onConfirm }) 
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
             <div className="flex">
               <svg
-                className="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0 mt-0.5"
+                className="h-5 w-5 text-yellow-400 mr-2 shrink-0 mt-0.5"
                 xmlns="http://www.w3.org/2000/svg"
                 viewBox="0 0 20 20"
                 fill="currentColor"

@@ -37,10 +37,8 @@ export default function OrdersPage() {
       setLoading(true);
       const params = filter ? { status: filter } : {};
       const response = await orderAPI.getMyOrders(params);
-      console.log('Orders response:', response.data); // DEBUG
       setOrders(response.data.results || response.data.orders || response.data);
     } catch (error) {
-      console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
@@ -162,7 +160,6 @@ export default function OrdersPage() {
           <div className="space-y-4">
             {orders.map((order) => {
               const canCancel = canCancelOrder(order);
-              console.log(`Order ${order.id}: status=${order.status}, can_cancel=${canCancel}`); // DEBUG
               
               return (
                 <div key={order.id} className="card p-6 hover:shadow-lg transition">
