@@ -152,7 +152,7 @@ export default function CheckoutPage() {
             <ShoppingBag className="w-24 h-24 text-gray-300 mx-auto mb-4" />
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">Your cart is empty</h2>
             <p className="text-gray-600 mb-6">Add some products before checking out</p>
-            <Link href="/products" className="btn-primary inline-block">
+            <Link href="/products" className="btn-primary inline-block px-4 py-2 rounded-lg">
               Browse Products
             </Link>
           </div>

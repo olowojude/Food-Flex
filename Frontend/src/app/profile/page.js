@@ -10,10 +10,11 @@ import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Toast from '@/components/common/Toast';
+import CancelOrderModal from '@/components/orders/CancelOrderModal';
 import { 
   User, Mail, Phone, MapPin, CreditCard, DollarSign, 
   TrendingDown, Calendar, Camera, Lock, CheckCircle,
-  Package, ShoppingBag, Eye, Upload, Wallet, Gift
+  Package, ShoppingBag, Eye, Upload, Wallet, Gift, XCircle
 } from 'lucide-react';
 
 function ProfileContent() {
@@ -34,6 +35,10 @@ function ProfileContent() {
   const [repaymentAmount, setRepaymentAmount] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
   
+  // Cancel order state
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  
   const [formData, setFormData] = useState({
     first_name: '',
     last_name: '',
@@ -41,14 +46,12 @@ function ProfileContent() {
     profile_image: '',
   });
 
-  // Check for payment success callback
   useEffect(() => {
     const repaymentStatus = searchParams.get('repayment');
     if (repaymentStatus === 'success') {
       showToast('Repayment successful! Your account has been updated.', 'success');
-      fetchData(); // Refresh credit data
+      fetchData();
       
-      // Clean up URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     }
@@ -79,9 +82,13 @@ function ProfileContent() {
         ]);
         setCreditAccount(creditRes.data);
         setTransactions(transactionsRes.data.slice(0, 5));
-        setOrders(ordersRes.data.results?.slice(0, 5) || ordersRes.data.slice(0, 5));
+        
+        // Handle different response formats
+        const ordersData = ordersRes.data.results || ordersRes.data.orders || ordersRes.data;
+        setOrders(Array.isArray(ordersData) ? ordersData.slice(0, 5) : []);
       }
     } catch (error) {
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -168,11 +175,9 @@ function ProfileContent() {
     try {
       setProcessingPayment(true);
       
-      // Initiate payment with Hydrogen Pay
       const response = await creditAPI.initiateBuyerRepayment(amount);
       
       if (response.data.payment_url) {
-        // Redirect to Hydrogen Pay checkout
         window.location.href = response.data.payment_url;
       } else {
         showToast('Failed to initiate payment', 'error');
@@ -182,6 +187,36 @@ function ProfileContent() {
       showToast(error.response?.data?.error || 'Failed to initiate payment', 'error');
       setProcessingPayment(false);
     }
+  };
+
+  // Cancel order handler
+  const handleCancelOrder = async (orderId, reason) => {
+    try {
+      const response = await orderAPI.cancelOrder(orderId, { reason });
+      
+      showToast(response.data.message || 'Order cancelled successfully!', 'success');
+      
+      // Refresh orders and credit data
+      await fetchData();
+    } catch (err) {
+      showToast(err.response?.data?.error || 'Failed to cancel order', 'error');
+      throw err;
+    }
+  };
+
+  const openCancelModal = (order) => {
+    setSelectedOrder(order);
+    setShowCancelModal(true);
+  };
+
+  // Check if order can be cancelled
+  const canCancelOrder = (order) => {
+    // First check if the backend provided can_cancel field
+    if (typeof order.can_cancel !== 'undefined') {
+      return order.can_cancel;
+    }
+    // Fallback: manual check
+    return order.status === 'PENDING' && !order.is_cancelled;
   };
 
   if (isLoading) {
@@ -207,7 +242,6 @@ function ProfileContent() {
   const outstandingBalance = parseFloat(creditAccount?.outstanding_balance || 0);
   const usagePercentage = creditLimit > 0 ? ((outstandingBalance / creditLimit) * 100).toFixed(1) : 0;
   
-  // Check if full payment for bonus eligibility
   const isFullPayment = repaymentAmount && Math.abs(parseFloat(repaymentAmount) - outstandingBalance) < 0.01;
 
   return (
@@ -295,6 +329,19 @@ function ProfileContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Cancel Order Modal */}
+      {selectedOrder && (
+        <CancelOrderModal
+          order={selectedOrder}
+          isOpen={showCancelModal}
+          onClose={() => {
+            setShowCancelModal(false);
+            setSelectedOrder(null);
+          }}
+          onConfirm={handleCancelOrder}
+        />
       )}
 
       {/* Toast Notifications */}
@@ -447,7 +494,7 @@ function ProfileContent() {
               </div>
             )}
 
-            {/* Orders Tab */}
+            {/* Orders Tab - UPDATED WITH CANCEL BUTTON */}
             {activeTab === 'orders' && isBuyer && (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-6">
@@ -459,36 +506,95 @@ function ProfileContent() {
 
                 {orders.length > 0 ? (
                   <div className="space-y-4">
-                    {orders.map((order) => (
-                      <Link
-                        key={order.id}
-                        href={`/orders/${order.id}`}
-                        className="block p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <p className="font-semibold text-gray-900">Order #{order.order_number}</p>
-                            <p className="text-sm text-gray-600">
-                              {new Date(order.created_at).toLocaleDateString()}
-                            </p>
+                    {orders.map((order) => {
+                      const canCancel = canCancelOrder(order);
+                      
+                      return (
+                        <div
+                          key={order.id}
+                          className="p-4 border border-gray-200 rounded-lg hover:border-blue-300 hover:shadow-md transition"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <p className="font-semibold text-gray-900">Order #{order.order_number}</p>
+                                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                                  order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                                  order.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800' :
+                                  order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
+                                  'bg-yellow-100 text-yellow-800'
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </div>
+                              <p className="text-sm text-gray-600 mb-2">
+                                {new Date(order.created_at).toLocaleDateString()}
+                              </p>
+                              <div className="flex items-center justify-between text-sm mb-3">
+                                <span className="text-gray-600">Total</span>
+                                <span className="font-bold text-gray-900">
+                                  ₦{parseFloat(order.total_amount).toLocaleString()}
+                                </span>
+                              </div>
+
+                              {/* Status Info Messages */}
+                              {order.status === 'PENDING' && !order.is_cancelled && (
+                                <div className="p-2 bg-yellow-50 rounded text-xs text-yellow-800">
+                                  ⏳ Waiting for seller confirmation
+                                </div>
+                              )}
+                              {order.status === 'CONFIRMED' && (
+                                <div className="p-2 bg-blue-50 rounded text-xs text-blue-800">
+                                  ✓ Order confirmed! Visit seller to collect
+                                </div>
+                              )}
+                              {order.status === 'COMPLETED' && (
+                                <div className="p-2 bg-green-50 rounded text-xs text-green-800">
+                                  ✓ Order completed. Thank you!
+                                </div>
+                              )}
+
+                              {/* Cancellation Info */}
+                              {/* {(order.is_cancelled || order.status === 'CANCELLED') && order.cancellation_info && (
+                                <div className="p-2 bg-red-50 border border-red-200 rounded">
+                                  <p className="text-red-800 font-medium text-xs">✗ Order Cancelled</p>
+                                  {order.cancellation_info.reason && (
+                                    <p className="text-red-600 text-xs mt-1">
+                                      Reason: {order.cancellation_info.reason}
+                                    </p>
+                                  )}
+                                </div>
+                              )} */}
+                            </div>
+
+                            {/* Action Buttons - Small, stacked on the right */}
+                            <div className="flex flex-col gap-2 items-end">
+                              <Link
+                                href={`/orders/${order.id}`}
+                                className="p-3 bg-blue-600 text-white hover:bg-blue-700 rounded text-xs font-medium transition flex items-center gap-1 whitespace-nowrap"
+                              >
+                                <Eye className="w-3 h-3" />
+                                View Details
+                              </Link>
+                              
+                              {/* Cancel Button - Only show for PENDING orders */}
+                              {canCancel && (
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    openCancelModal(order);
+                                  }}
+                                  className="p-3 bg-red-600 text-white hover:bg-red-700 rounded text-xs font-medium transition flex items-center gap-1 whitespace-nowrap"
+                                >
+                                  <XCircle className="w-3 h-3" />
+                                  Cancel Order
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            order.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
-                            order.status === 'CONFIRMED' ? 'bg-blue-100 text-blue-800' :
-                            order.status === 'CANCELLED' ? 'bg-red-100 text-red-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {order.status}
-                          </span>
                         </div>
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-gray-600">Total</span>
-                          <span className="font-bold text-gray-900">
-                            ₦{parseFloat(order.total_amount).toLocaleString()}
-                          </span>
-                        </div>
-                      </Link>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-12">
@@ -505,9 +611,8 @@ function ProfileContent() {
             {/* Credit Info Tab */}
             {activeTab === 'credit' && isBuyer && (
               <div className="space-y-6">
-                {/* Repay Loan Button (Prominent) */}
                 {outstandingBalance > 0 && (
-                  <div className="bg-linear-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
+                  <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-xl p-6 text-white shadow-lg">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
@@ -536,7 +641,6 @@ function ProfileContent() {
                   </div>
                 )}
 
-                {/* Credit Overview */}
                 <div className="grid md:grid-cols-3 gap-6">
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                     <div className="flex items-center justify-between mb-2">
@@ -573,7 +677,6 @@ function ProfileContent() {
                   </div>
                 </div>
 
-                {/* Credit Status */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Credit Status</h3>
                   <div className="flex items-center justify-between mb-4">
@@ -604,7 +707,6 @@ function ProfileContent() {
                   )}
                 </div>
 
-                {/* Recent Transactions */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-900">Recent Transactions</h3>

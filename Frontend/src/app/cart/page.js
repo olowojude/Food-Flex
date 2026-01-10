@@ -93,7 +93,7 @@ useEffect(() => {
             <ShoppingBag className="w-24 h-24 text-gray-300 mx-auto mb-4" />
             <h2 className="text-2xl font-semibold text-gray-900 mb-2">Your cart is empty</h2>
             <p className="text-gray-600 mb-6">Add some products to get started!</p>
-            <Link href="/products" className="btn-primary inline-block">
+            <Link href="/products" className="btn-primary inline-block px-4 py-2 rounded-lg">
               Browse Products
             </Link>
           </div>
@@ -212,13 +212,13 @@ useEffect(() => {
                   </div>
                 </div>
 
-                <Link href="/checkout" className="btn-primary w-full text-center block mb-3">
+                <Link href="/checkout" className="btn-primary w-full text-center block mb-3 px-4 py-2 rounded-lg">
                   Proceed to Checkout
                 </Link>
 
                 <Link
                   href="/products"
-                  className="btn-secondary w-full text-center block"
+                  className="btn-secondary w-full text-center block px-4 py-2 rounded-lg"
                 >
                   Continue Shopping
                 </Link>

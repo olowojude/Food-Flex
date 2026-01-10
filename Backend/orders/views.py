@@ -673,6 +673,62 @@ def complete_order(request, order_id):
         )
 
 
+
+from django.shortcuts import get_object_or_404
+
+@api_view(['POST'])
+@permission_classes([IsBuyer])
+def cancel_order(request, order_id):
+    """
+    Cancel a pending order and refund credit to buyer.
+    Only the buyer can cancel their own pending orders.
+    """
+    user = request.user
+    
+    order = get_object_or_404(Order, id=order_id)
+    
+    # Check if user is the buyer
+    if order.buyer != user:
+        return Response(
+            {'error': 'You can only cancel your own orders.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Check if order can be cancelled
+    if not order.can_be_cancelled():
+        return Response(
+            {
+                'error': 'This order cannot be cancelled.',
+                'reason': 'Only pending orders can be cancelled.',
+                'current_status': order.status
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get cancellation reason from request
+    reason = request.data.get('reason', '')
+    
+    # Cancel the order
+    success, message, refunded_amount = order.cancel_order_by_buyer(user, reason)
+    
+    if success:
+        serializer = OrderDetailSerializer(order)
+        return Response(
+            {
+                'success': True,
+                'message': message,
+                'order': serializer.data,
+                'refunded_amount': refunded_amount
+            },
+            status=status.HTTP_200_OK
+        )
+    else:
+        return Response(
+            {'error': message},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def my_orders(request):

@@ -14,7 +14,7 @@ export default function OrdersPage() {
   const { isAuthenticated, isLoading, isBuyer } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState(''); // '', 'PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'
+  const [filter, setFilter] = useState('');
   
   // Cancellation state
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -37,8 +37,10 @@ export default function OrdersPage() {
       setLoading(true);
       const params = filter ? { status: filter } : {};
       const response = await orderAPI.getMyOrders(params);
+      console.log('Orders response:', response.data); // DEBUG
       setOrders(response.data.results || response.data.orders || response.data);
     } catch (error) {
+      console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
     }
@@ -56,13 +58,23 @@ export default function OrdersPage() {
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to cancel order');
       setTimeout(() => setError(null), 5000);
-      throw err; // Re-throw to handle in modal
+      throw err;
     }
   };
 
   const openCancelModal = (order) => {
     setSelectedOrder(order);
     setShowCancelModal(true);
+  };
+
+  // Check if order can be cancelled - more explicit check
+  const canCancelOrder = (order) => {
+    // Check if API provided can_cancel field
+    if (typeof order.can_cancel !== 'undefined') {
+      return order.can_cancel;
+    }
+    // Fallback: check manually
+    return order.status === 'PENDING' && !order.is_cancelled;
   };
 
   const getStatusBadge = (status) => {
@@ -148,97 +160,102 @@ export default function OrdersPage() {
           </div>
         ) : orders.length > 0 ? (
           <div className="space-y-4">
-            {orders.map((order) => (
-              <div key={order.id} className="card p-6 hover:shadow-lg transition">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  {/* Order Info */}
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-3">
-                      <Package className="w-5 h-5 text-gray-600" />
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        Order #{order.order_number}
-                      </h3>
-                      <span className={`badge ${getStatusBadge(order.status)}`}>
-                        {order.status}
-                      </span>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-3 text-sm">
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Calendar className="w-4 h-4" />
-                        <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <CreditCard className="w-4 h-4" />
-                        <span className="font-semibold text-gray-900">
-                          ₦{parseFloat(order.total_amount).toLocaleString()}
+            {orders.map((order) => {
+              const canCancel = canCancelOrder(order);
+              console.log(`Order ${order.id}: status=${order.status}, can_cancel=${canCancel}`); // DEBUG
+              
+              return (
+                <div key={order.id} className="card p-6 hover:shadow-lg transition">
+                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                    {/* Order Info */}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-3">
+                        <Package className="w-5 h-5 text-gray-600" />
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          Order #{order.order_number}
+                        </h3>
+                        <span className={`badge ${getStatusBadge(order.status)}`}>
+                          {order.status}
                         </span>
                       </div>
-                      <div className="text-gray-600">
-                        <span className="font-medium">Seller:</span> {order.seller_name}
+
+                      <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Calendar className="w-4 h-4" />
+                          <span>{new Date(order.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <CreditCard className="w-4 h-4" />
+                          <span className="font-semibold text-gray-900">
+                            ₦{parseFloat(order.total_amount).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-gray-600">
+                          <span className="font-medium">Seller:</span> {order.seller_name}
+                        </div>
+                        <div className="text-gray-600">
+                          <span className="font-medium">Items:</span> {order.items_count || 'N/A'}
+                        </div>
                       </div>
-                      <div className="text-gray-600">
-                        <span className="font-medium">Items:</span> {order.items_count || 'N/A'}
-                      </div>
+
+                      {/* Status Info */}
+                      {order.status === 'PENDING' && !order.is_cancelled && (
+                        <div className="mt-3 p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
+                          ⏳ Waiting for seller confirmation. Show your QR code at pickup location.
+                        </div>
+                      )}
+                      {order.status === 'CONFIRMED' && (
+                        <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+                          ✓ Order confirmed! Visit seller to collect your items.
+                        </div>
+                      )}
+                      {order.status === 'COMPLETED' && (
+                        <div className="mt-3 p-3 bg-green-50 rounded-lg text-sm text-green-800">
+                          ✓ Order completed. Thank you for shopping with FoodFlex!
+                        </div>
+                      )}
+                      
+                      {/* Cancellation Info */}
+                      {/* {(order.is_cancelled || order.status === 'CANCELLED') && order.cancellation_info && (
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-red-800 font-medium text-sm">✗ Order Cancelled</p>
+                          {order.cancellation_info.reason && (
+                            <p className="text-red-600 text-xs mt-1">
+                              Reason: {order.cancellation_info.reason}
+                            </p>
+                          )}
+                          <p className="text-red-500 text-xs mt-1">
+                            {new Date(order.cancellation_info.cancelled_at).toLocaleString()}
+                          </p>
+                        </div>
+                      )} */}
                     </div>
 
-                    {/* Status Info */}
-                    {order.status === 'PENDING' && (
-                      <div className="mt-3 p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
-                        Waiting for seller confirmation. Show your QR code at pickup location.
-                      </div>
-                    )}
-                    {order.status === 'CONFIRMED' && (
-                      <div className="mt-3 p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-                        ✓ Order confirmed! Visit seller to collect your items.
-                      </div>
-                    )}
-                    {order.status === 'COMPLETED' && (
-                      <div className="mt-3 p-3 bg-green-50 rounded-lg text-sm text-green-800">
-                        ✓ Order completed. Thank you for shopping with FoodFlex!
-                      </div>
-                    )}
-                    
-                    {/* Cancellation Info */}
-                    {order.is_cancelled && order.cancellation_info && (
-                      <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-red-800 font-medium text-sm">✗ Order Cancelled</p>
-                        {order.cancellation_info.reason && (
-                          <p className="text-red-600 text-xs mt-1">
-                            Reason: {order.cancellation_info.reason}
-                          </p>
-                        )}
-                        <p className="text-red-500 text-xs mt-1">
-                          {new Date(order.cancellation_info.cancelled_at).toLocaleString()}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Link
-                      href={`/orders/${order.id}`}
-                      className="btn-primary flex items-center justify-center gap-2"
-                    >
-                      <Eye className="w-4 h-4" />
-                      View Details
-                    </Link>
-                    
-                    {/* Cancel Order Button - Only for PENDING orders */}
-                    {order.can_cancel && order.status === 'PENDING' && (
-                      <button
-                        onClick={() => openCancelModal(order)}
-                        className="btn bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2"
+                    {/* Actions */}
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Link
+                        href={`/orders/${order.id}`}
+                        className="btn-primary flex items-center justify-center gap-2 px-4 py-2 rounded-lg"
                       >
-                        <XCircle className="w-4 h-4" />
-                        Cancel Order
-                      </button>
-                    )}
+                        <Eye className="w-4 h-4" />
+                        View Details
+                      </Link>
+                      
+                      {/* Cancel Order Button - Show for PENDING orders only */}
+                      {canCancel && (
+                        <button
+                          onClick={() => openCancelModal(order)}
+                          className="btn bg-red-600 text-white hover:bg-red-700 flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Cancel Order
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="card p-12 text-center">

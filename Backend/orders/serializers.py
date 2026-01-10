@@ -89,17 +89,26 @@ class OrderListSerializer(serializers.ModelSerializer):
     buyer_name = serializers.CharField(source='buyer.get_full_name', read_only=True)
     seller_name = serializers.CharField(source='seller.get_full_name', read_only=True)
     items_count = serializers.SerializerMethodField()
+    can_cancel = serializers.SerializerMethodField()
+    cancellation_info = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'buyer', 'buyer_name',
             'seller', 'seller_name', 'total_amount',
-            'status', 'items_count', 'created_at'
+            'status', 'items_count', 'created_at',
+            'is_cancelled', 'cancelled_at', 'can_cancel', 'cancellation_info'
         ]
     
     def get_items_count(self, obj):
         return obj.items.count()
+    
+    def get_can_cancel(self, obj):
+        return obj.can_be_cancelled()
+
+    def get_cancellation_info(self, obj):
+        return obj.get_cancellation_info()
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
@@ -110,6 +119,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     
     seller_info = serializers.SerializerMethodField()
     items = OrderItemSerializer(many=True, read_only=True)
+    can_cancel = serializers.SerializerMethodField()
+    cancellation_info = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
@@ -119,7 +130,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'seller_info',
             'total_amount', 'status', 'qr_code_token',
             'qr_code_image', 'items', 'notes',
-            'created_at', 'confirmed_at', 'completed_at'
+            'created_at', 'confirmed_at', 'completed_at',
+            'is_cancelled', 'cancelled_at', 'cancellation_reason', 
+            'can_cancel', 'cancellation_info',
         ]
     
     def get_buyer_phone(self, obj):
@@ -199,6 +212,13 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             }
         
         return seller_data
+    
+
+    def get_can_cancel(self, obj):
+        return obj.can_be_cancelled()
+
+    def get_cancellation_info(self, obj):
+        return obj.get_cancellation_info()
     
 
 

@@ -13,19 +13,23 @@ urlpatterns = [
     
     # Checkout
     path('checkout/', views.checkout, name='checkout'),
-    path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
     
     # Orders 
-    path('', views.my_orders, name='my_orders'),  # GET for buyers, different response for sellers
+    path('', views.my_orders, name='my_orders'),
     path('<int:order_id>/', views.order_detail, name='order_detail'),
     path('<int:order_id>/qr-code/', views.save_qr_code, name='save_qr_code'),
+    
+    # Order Cancellation - NEW
+    path('<int:order_id>/cancel/', views.cancel_order, name='cancel_order'),
+    
+    # QR & OTP
+    path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
+    path('<int:order_id>/otp/', views.get_buyer_otp, name='get_buyer_otp'),
     
     # Order Actions for seller
     path('<int:order_id>/confirm/', views.confirm_order, name='confirm_order'),
     path('<int:order_id>/complete/', views.complete_order, name='complete_order'),
-    path('verify-qr/', views.verify_qr_code, name='verify_qr_code'),
-    path('<int:order_id>/otp/', views.get_buyer_otp, name='get-buyer-otp'),
     
-    # for admin
+    # Admin
     path('all/', views.all_orders, name='all_orders'),
 ]
