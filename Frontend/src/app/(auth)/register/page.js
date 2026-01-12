@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import Input from '@/components/common/Input';
 import Button from '@/components/common/Button';
-import { UserPlus, ArrowLeft, MapPin } from 'lucide-react';
+import TermsModal from '@/components/common/TermsModal';
+import { UserPlus, ArrowLeft, MapPin, FileText } from 'lucide-react';
 import { NIGERIA_STATES, getCitiesForState, hasPreDefinedCities } from '@/data/locations';
 
 export default function RegisterPage() {
@@ -14,6 +15,8 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [cities, setCities] = useState([]);
   const [showCustomCity, setShowCustomCity] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
   
   const [formData, setFormData] = useState({
     username: '',
@@ -54,6 +57,13 @@ export default function RegisterPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
+    }
+  };
+
+  const handleTermsChange = (e) => {
+    setTermsAccepted(e.target.checked);
+    if (errors.terms) {
+      setErrors(prev => ({ ...prev, terms: '' }));
     }
   };
 
@@ -98,6 +108,10 @@ export default function RegisterPage() {
 
     if (formData.password !== formData.password2) {
       newErrors.password2 = 'Passwords do not match';
+    }
+
+    if (!termsAccepted) {
+      newErrors.terms = 'You must accept the Terms and Conditions to continue';
     }
 
     setErrors(newErrors);
@@ -346,7 +360,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Password */}
-            <div className="space-y-4">
+            <div className="border-b pb-4 space-y-4">
               <Input
                 label="Password"
                 name="password"
@@ -370,14 +384,69 @@ export default function RegisterPage() {
               />
             </div>
 
+            {/* Terms and Conditions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <FileText className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
+                    Terms and Conditions
+                  </h3>
+                  <p className="text-sm text-gray-600 mb-3">
+                    Please read our terms and conditions carefully before creating your account.
+                  </p>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(true)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium underline mb-3"
+                  >
+                    Read Terms and Conditions
+                  </button>
+
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      id="terms"
+                      checked={termsAccepted}
+                      onChange={handleTermsChange}
+                      className="mt-1 w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                    />
+                    <label htmlFor="terms" className="text-sm text-gray-700">
+                      I have read and agree to the{' '}
+                      <button
+                        type="button"
+                        onClick={() => setShowTermsModal(true)}
+                        className="text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        Terms and Conditions
+                      </button>
+                      <span className="text-red-500 ml-1">*</span>
+                    </label>
+                  </div>
+                  
+                  {errors.terms && (
+                    <p className="text-sm text-red-600 mt-2">{errors.terms}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <Button
               type="submit"
               variant="primary"
               loading={loading}
+              disabled={!termsAccepted || loading}
               className="w-full"
             >
               Create Account
             </Button>
+
+            {!termsAccepted && (
+              <p className="text-xs text-center text-gray-500">
+                You must accept the Terms and Conditions to create an account
+              </p>
+            )}
           </form>
 
           <div className="mt-6 text-center">
@@ -390,6 +459,12 @@ export default function RegisterPage() {
           </div>
         </div>
       </div>
+
+      {/* Terms and Conditions Modal */}
+      <TermsModal 
+        isOpen={showTermsModal} 
+        onClose={() => setShowTermsModal(false)} 
+      />
     </div>
   );
 }
