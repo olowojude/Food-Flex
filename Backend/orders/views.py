@@ -205,11 +205,174 @@ def clear_cart(request):
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
 def checkout(request):
+    """
+    Step 1: Calculate BNPL breakdown and save to session
+    """
     user = request.user
     
     if user.role != 'BUYER':
         return Response(
             {'error': 'Only buyers can checkout'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        cart = Cart.objects.prefetch_related(
+            'items__product__seller'
+        ).get(user=user)
+        
+        if not cart.items.exists():
+            return Response(
+                {'error': 'Cart is empty'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Group cart items by seller
+        items_by_seller = defaultdict(list)
+        for item in cart.items.select_related('product__seller'):
+            seller = item.product.seller
+            items_by_seller[seller].append(item)
+        
+        # Calculate total amount
+        total_amount = cart.subtotal
+        
+        # Calculate BNPL breakdown
+        from decimal import Decimal
+        upfront_amount = (total_amount * Decimal('0.10')).quantize(Decimal('0.01'))
+        loan_amount = total_amount
+        principal_amount = (total_amount * Decimal('0.90')).quantize(Decimal('0.01'))
+        service_fee = (principal_amount * Decimal('0.085')).quantize(Decimal('0.01'))
+        total_repayment = (principal_amount + service_fee).quantize(Decimal('0.01'))
+        
+        # Check credit availability
+        credit_account = user.credit_account
+        if not credit_account.can_purchase(loan_amount):
+            return Response(
+                {
+                    'error': 'Insufficient credit limit',
+                    'available_credit': float(credit_account.credit_balance),
+                    'required': float(loan_amount),
+                    'shortfall': float(loan_amount - credit_account.credit_balance)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check stock availability
+        for seller, seller_items in items_by_seller.items():
+            for cart_item in seller_items:
+                product = cart_item.product
+                product.refresh_from_db()
+                
+                if cart_item.quantity > product.stock_quantity:
+                    return Response(
+                        {
+                            'error': f'Insufficient stock for {product.name}',
+                            'available': product.stock_quantity,
+                            'requested': cart_item.quantity
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        
+        # Generate checkout session ID
+        from django.utils.crypto import get_random_string
+        checkout_session = get_random_string(64)
+        
+        # CRITICAL: Store in session
+        session_data = {
+            'session_id': checkout_session,
+            'user_id': user.id,
+            'total_amount': str(total_amount),
+            'upfront_amount': str(upfront_amount),
+            'created_at': timezone.now().isoformat(),
+        }
+        
+        request.session['pending_checkout'] = session_data
+        request.session.modified = True  # ✅ CRITICAL: Force save
+        
+        # DEBUG logging
+        print(f"✅ Session saved: {checkout_session}")
+        print(f"✅ User ID: {user.id}")
+        print(f"✅ Total: {total_amount}")
+        
+        # Return payment breakdown
+        return Response({
+            'checkout_session': checkout_session,
+            'breakdown': {
+                'cart_total': float(total_amount),
+                'upfront_payment': float(upfront_amount),
+                'upfront_percentage': 10,
+                'loan_amount': float(loan_amount),
+                'principal_amount': float(principal_amount),
+                'service_fee_rate': 8.5,
+                'total_service_fee': float(service_fee),
+                'service_fee_duration_days': 30,
+                'total_repayment_due': float(total_repayment),
+                'daily_interest_rate': 0.2833,
+                'grace_period_days': 5
+            },
+            'message': 'Review payment breakdown and confirm to proceed',
+        }, status=status.HTTP_200_OK)
+        
+    except Cart.DoesNotExist:
+        return Response(
+            {'error': 'Cart not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        print(f"❌ Checkout error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def confirm_checkout(request):
+    """
+    Step 2: Confirm checkout after dummy payment
+    """
+    user = request.user
+    checkout_session = request.data.get('checkout_session')
+    payment_reference = request.data.get('payment_reference', 'DUMMY_PAYMENT')
+    
+    if not checkout_session:
+        return Response(
+            {'error': 'Checkout session is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # DEBUG logging
+    print(f"🔍 Confirm checkout for session: {checkout_session}")
+    print(f"🔍 Session keys: {list(request.session.keys())}")
+    
+    # Verify session
+    pending_checkout = request.session.get('pending_checkout')
+    
+    if not pending_checkout:
+        print(f"❌ No session data found!")
+        return Response(
+            {'error': 'Invalid or expired checkout session. Please try again.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    print(f"✅ Session data found: {pending_checkout}")
+    
+    # Validate session ID
+    if pending_checkout.get('session_id') != checkout_session:
+        print(f"❌ Session ID mismatch!")
+        return Response(
+            {'error': 'Invalid checkout session'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate user ID
+    if pending_checkout.get('user_id') != user.id:
+        print(f"❌ User ID mismatch!")
+        return Response(
+            {'error': 'Session belongs to different user'},
             status=status.HTTP_403_FORBIDDEN
         )
     
@@ -231,24 +394,24 @@ def checkout(request):
                 seller = item.product.seller
                 items_by_seller[seller].append(item)
             
-            # Calculate total amount
             total_amount = cart.subtotal
-            
-            # Check credit
             credit_account = user.credit_account
-            if not credit_account.can_purchase(total_amount):
+            
+            # Validate total matches session
+            from decimal import Decimal
+            session_total = Decimal(pending_checkout['total_amount'])
+            if abs(total_amount - session_total) > Decimal('0.01'):
                 return Response(
-                    {
-                        'error': 'Insufficient credit',
-                        'available_credit': float(credit_account.credit_balance),
-                        'required': float(total_amount)
-                    },
+                    {'error': 'Cart total has changed. Please checkout again.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Generate unique checkout session token
-            from django.utils.crypto import get_random_string
-            checkout_session = get_random_string(64)
+            # Check credit again
+            if not credit_account.can_purchase(total_amount):
+                return Response(
+                    {'error': 'Insufficient credit'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
             
             # Create orders for each seller
             created_orders = []
@@ -260,14 +423,21 @@ def checkout(request):
                     for item in seller_items
                 )
                 
-                # Create order
+                # Create order with BNPL fields
                 order = Order.objects.create(
                     buyer=user,
                     seller=seller,
                     total_amount=order_total,
                     status=Order.OrderStatus.PENDING,
-                    qr_code_token=checkout_session
+                    qr_code_token=checkout_session,
+                    upfront_payment_reference=payment_reference
                 )
+                
+                # Calculate and set loan details
+                order.calculate_loan_details()
+                
+                # Activate loan (mark upfront as paid)
+                order.activate_loan()
                 
                 # Create order items and reduce stock
                 for cart_item in seller_items:
@@ -276,8 +446,7 @@ def checkout(request):
                     
                     if cart_item.quantity > product.stock_quantity:
                         raise Exception(
-                            f'Insufficient stock for {product.name}. '
-                            f'Available: {product.stock_quantity}, Requested: {cart_item.quantity}'
+                            f'Insufficient stock for {product.name}'
                         )
                     
                     OrderItem.objects.create(
@@ -293,7 +462,7 @@ def checkout(request):
                 created_orders.append(order)
                 order_ids.append(order.id)
             
-            # Generate one QR code for all orders
+            # Generate QR code
             qr_data_dict = {
                 'buyer_id': user.id,
                 'order_ids': order_ids,
@@ -303,7 +472,6 @@ def checkout(request):
             
             qr_data_string = json.dumps(qr_data_dict)
             
-            # Create QR code image
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -318,7 +486,7 @@ def checkout(request):
             img.save(buffer, format='PNG')
             qr_code_base64 = f"data:image/png;base64,{base64.b64encode(buffer.getvalue()).decode()}"
             
-            # Deduct credit
+            # Deduct FULL amount from credit
             old_balance = credit_account.credit_balance
             credit_account.deduct_credit(total_amount)
             
@@ -329,28 +497,39 @@ def checkout(request):
                 amount=total_amount,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"Multi-order purchase - {len(created_orders)} orders",
+                description=f"BNPL Purchase - {len(created_orders)} order(s) - 10% upfront paid",
                 reference=checkout_session
             )
             
             # Clear cart
             cart.clear()
             
+            # Clear session
+            if 'pending_checkout' in request.session:
+                del request.session['pending_checkout']
+                request.session.modified = True
+            
+            print(f"✅ Checkout completed successfully!")
+            
             # Serialize orders
             serialized_orders = OrderDetailSerializer(created_orders, many=True).data
             
-            return Response(
-                {
-                    'message': f'Checkout successful! {len(created_orders)} order(s) created.',
-                    'orders': serialized_orders,
-                    'order_count': len(created_orders),
-                    'order_ids': order_ids,
-                    'total_amount': float(total_amount),
-                    'qr_code_base64': qr_code_base64,
-                    'checkout_session': checkout_session
-                },
-                status=status.HTTP_201_CREATED
-            )
+            return Response({
+                'success': True,
+                'message': f'Checkout successful! {len(created_orders)} order(s) created.',
+                'orders': serialized_orders,
+                'order_count': len(created_orders),
+                'order_ids': order_ids,
+                'total_amount': float(total_amount),
+                'qr_code_base64': qr_code_base64,
+                'checkout_session': checkout_session,
+                'payment_info': {
+                    'upfront_paid': float(created_orders[0].upfront_payment) if created_orders else 0,
+                    'total_loan': float(total_amount),
+                    'principal_owed': float(created_orders[0].principal_amount) if created_orders else 0,
+                    'service_fee_estimate': float(created_orders[0].total_service_fee) if created_orders else 0
+                }
+            }, status=status.HTTP_201_CREATED)
             
     except Cart.DoesNotExist:
         return Response(
@@ -358,6 +537,9 @@ def checkout(request):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
+        print(f"❌ Confirm error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return Response(
             {'error': str(e)},
             status=status.HTTP_400_BAD_REQUEST

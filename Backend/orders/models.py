@@ -114,6 +114,136 @@ class Order(models.Model):
         decimal_places=2,
         validators=[MinValueValidator(0.01)]
     )
+
+        # BNPL (Buy Now Pay Later) Fields
+    upfront_payment = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="10% upfront payment (for commitment)"
+    )
+    
+    upfront_payment_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('PAID', 'Paid'),
+            ('FAILED', 'Failed')
+        ],
+        default='PENDING'
+    )
+    
+    upfront_payment_reference = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Payment transaction reference"
+    )
+    
+    # Loan Details
+    loan_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Full order amount (deducted from credit limit)"
+    )
+    
+    principal_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="90% - Amount after upfront payment (what interest is calculated on)"
+    )
+    
+    # Interest Calculation
+    service_fee_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=8.5,
+        help_text="Service fee percentage (default 8.5%)"
+    )
+    
+    total_service_fee = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Total service fee for 30 days (principal * 8.5%)"
+    )
+    
+    accrued_interest = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Interest accrued so far (updated daily)"
+    )
+    
+    daily_interest_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        default=0,
+        help_text="Daily interest rate (8.5% / 30)"
+    )
+    
+    # Loan Timeline
+    loan_start_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the loan started (after upfront payment)"
+    )
+    
+    loan_due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="30 days after loan start"
+    )
+    
+    grace_period_end_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="35 days after loan start (5 day grace)"
+    )
+    
+    days_elapsed = models.IntegerField(
+        default=0,
+        help_text="Days since loan started"
+    )
+    
+    # Repayment Tracking
+    principal_paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Principal amount paid so far"
+    )
+    
+    interest_paid = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Interest amount paid so far"
+    )
+    
+    remaining_principal = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Principal still owed"
+    )
+    
+    is_fully_paid = models.BooleanField(
+        default=False,
+        help_text="Whether loan is fully repaid"
+    )
+    
+    is_overdue = models.BooleanField(
+        default=False,
+        help_text="Whether payment is past grace period"
+    )
+    
+    last_payment_date = models.DateTimeField(
+        null=True,
+        blank=True
+    )
     
     status = models.CharField(
         max_length=10,
@@ -351,6 +481,123 @@ class Order(models.Model):
         seller_profile = self.seller.seller_profile
         seller_profile.add_earnings(self.total_amount)
         seller_profile.increment_order_count()
+
+    
+    def calculate_loan_details(self):
+        """Calculate all loan-related amounts"""
+        from decimal import Decimal
+        
+        # 10% upfront
+        self.upfront_payment = (self.total_amount * Decimal('0.10')).quantize(Decimal('0.01'))
+        
+        # Full amount is the loan
+        self.loan_amount = self.total_amount
+        
+        # Principal = 90% (amount after upfront)
+        self.principal_amount = (self.total_amount * Decimal('0.90')).quantize(Decimal('0.01'))
+        
+        # Total service fee (8.5% of principal over 30 days)
+        self.total_service_fee = (self.principal_amount * Decimal('0.085')).quantize(Decimal('0.01'))
+        
+        # Daily interest rate
+        self.daily_interest_rate = (Decimal('0.085') / Decimal('30'))
+        
+        # Remaining principal starts at full principal
+        self.remaining_principal = self.principal_amount
+        
+        self.save()
+    
+    def activate_loan(self):
+        """Activate loan after upfront payment is successful"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        self.upfront_payment_status = 'PAID'
+        self.loan_start_date = timezone.now()
+        self.loan_due_date = self.loan_start_date + timedelta(days=30)
+        self.grace_period_end_date = self.loan_start_date + timedelta(days=35)
+        self.save()
+    
+    def update_accrued_interest(self):
+        """Update accrued interest based on days elapsed"""
+        from django.utils import timezone
+        from decimal import Decimal
+        
+        if not self.loan_start_date or self.is_fully_paid:
+            return
+        
+        # Calculate days elapsed
+        self.days_elapsed = (timezone.now() - self.loan_start_date).days
+        
+        # Calculate accrued interest (daily rate * days * remaining principal)
+        daily_interest = self.remaining_principal * self.daily_interest_rate
+        self.accrued_interest = (daily_interest * Decimal(str(self.days_elapsed))).quantize(Decimal('0.01'))
+        
+        # Check if overdue (past grace period)
+        if timezone.now() > self.grace_period_end_date:
+            self.is_overdue = True
+        
+        self.save()
+    
+    @property
+    def total_amount_due(self):
+        """Total amount buyer must pay (principal + accrued interest)"""
+        from decimal import Decimal
+        return (self.remaining_principal + self.accrued_interest).quantize(Decimal('0.01'))
+    
+    @property
+    def days_remaining(self):
+        """Days until due date"""
+        from django.utils import timezone
+        if not self.loan_due_date:
+            return 0
+        remaining = (self.loan_due_date - timezone.now()).days
+        return max(0, remaining)
+    
+    @property
+    def is_in_grace_period(self):
+        """Check if in 5-day grace period"""
+        from django.utils import timezone
+        if not self.loan_due_date:
+            return False
+        return self.loan_due_date < timezone.now() <= self.grace_period_end_date
+    
+    def process_partial_payment(self, amount):
+        """Process partial payment (interest first, then principal)"""
+        from decimal import Decimal
+        from django.utils import timezone
+        
+        amount = Decimal(str(amount))
+        
+        # Update accrued interest first
+        self.update_accrued_interest()
+        
+        # Pay interest first
+        interest_payment = min(amount, self.accrued_interest)
+        self.interest_paid += interest_payment
+        self.accrued_interest -= interest_payment
+        remaining_amount = amount - interest_payment
+        
+        # Then pay principal
+        if remaining_amount > 0:
+            principal_payment = min(remaining_amount, self.remaining_principal)
+            self.principal_paid += principal_payment
+            self.remaining_principal -= principal_payment
+        
+        # Check if fully paid
+        if self.remaining_principal <= 0 and self.accrued_interest <= 0:
+            self.is_fully_paid = True
+        
+        self.last_payment_date = timezone.now()
+        self.save()
+        
+        return {
+            'interest_paid': float(interest_payment),
+            'principal_paid': float(principal_payment),
+            'remaining_principal': float(self.remaining_principal),
+            'remaining_interest': float(self.accrued_interest),
+            'is_fully_paid': self.is_fully_paid
+        }
 
 
 class OrderItem(models.Model):

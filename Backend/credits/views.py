@@ -412,3 +412,346 @@ def all_credit_limit_history(request):
     history = CreditLimitHistory.objects.all()
     serializer = CreditLimitHistorySerializer(history, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# ADD THESE TO THE EXISTING credits/views.py FILE
+
+from orders.models import Order
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_active_loans(request):
+    """
+    Get all active loans for the logged-in buyer with current interest
+    """
+    user = request.user
+    
+    if user.role != 'BUYER':
+        return Response(
+            {'error': 'Only buyers have loans'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    # Get all orders with active loans
+    active_loans = Order.objects.filter(
+        buyer=user,
+        upfront_payment_status='PAID',
+        is_fully_paid=False,
+        loan_start_date__isnull=False
+    ).select_related('seller').prefetch_related('items__product')
+    
+    # Update interest for all loans
+    for loan in active_loans:
+        loan.update_accrued_interest()
+    
+    # Prepare loan data
+    loans_data = []
+    total_principal = 0
+    total_interest = 0
+    total_due = 0
+    
+    for loan in active_loans:
+        from decimal import Decimal
+        
+        # Calculate early payment savings
+        days_remaining = loan.days_remaining
+        daily_interest = loan.remaining_principal * loan.daily_interest_rate
+        potential_savings = daily_interest * Decimal(str(days_remaining))
+        
+        loan_info = {
+            'order_id': loan.id,
+            'order_number': loan.order_number,
+            'seller_name': loan.seller.get_full_name(),
+            'created_at': loan.created_at.isoformat(),
+            
+            # Loan details
+            'loan_amount': str(loan.loan_amount),
+            'principal_amount': str(loan.principal_amount),
+            'remaining_principal': str(loan.remaining_principal),
+            
+            # Interest
+            'accrued_interest': str(loan.accrued_interest),
+            'total_service_fee': str(loan.total_service_fee),
+            'daily_interest_rate': str(loan.daily_interest_rate),
+            
+            # Timeline
+            'loan_start_date': loan.loan_start_date.isoformat(),
+            'loan_due_date': loan.loan_due_date.isoformat(),
+            'days_elapsed': loan.days_elapsed,
+            'days_remaining': loan.days_remaining,
+            
+            # Payment status
+            'total_amount_due': str(loan.total_amount_due),
+            'is_overdue': loan.is_overdue,
+            'is_in_grace_period': loan.is_in_grace_period,
+            
+            # Savings potential
+            'potential_savings': str(potential_savings),
+            'full_payment_bonus_eligible': loan.days_elapsed <= 30,
+        }
+        
+        loans_data.append(loan_info)
+        total_principal += float(loan.remaining_principal)
+        total_interest += float(loan.accrued_interest)
+        total_due += float(loan.total_amount_due)
+    
+    return Response({
+        'active_loans': loans_data,
+        'summary': {
+            'total_active_loans': len(loans_data),
+            'total_principal_owed': total_principal,
+            'total_interest_accrued': total_interest,
+            'total_amount_due': total_due,
+        }
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def initiate_loan_repayment(request):
+    """
+    Step 1: Calculate repayment breakdown and save to session
+    """
+    user = request.user
+    
+    if user.role != 'BUYER':
+        return Response(
+            {'error': 'Only buyers can make loan repayments'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    order_id = request.data.get('order_id')
+    amount = request.data.get('amount')
+    
+    if not order_id or not amount:
+        return Response(
+            {'error': 'order_id and amount are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        from decimal import Decimal
+        amount = Decimal(str(amount))
+    except:
+        return Response(
+            {'error': 'Invalid amount format'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if amount <= 0:
+        return Response(
+            {'error': 'Amount must be greater than zero'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Get the order
+        order = Order.objects.get(
+            id=order_id,
+            buyer=user,
+            upfront_payment_status='PAID',
+            is_fully_paid=False
+        )
+        
+        # Update interest before calculating
+        order.update_accrued_interest()
+        
+        # Validate amount
+        if amount > order.total_amount_due:
+            return Response(
+                {
+                    'error': f'Payment amount (₦{float(amount):,.2f}) exceeds total due (₦{float(order.total_amount_due):,.2f})',
+                    'total_due': str(order.total_amount_due)
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Calculate payment breakdown (interest first, then principal)
+        interest_payment = min(amount, order.accrued_interest)
+        remaining_after_interest = amount - interest_payment
+        principal_payment = min(remaining_after_interest, order.remaining_principal)
+        
+        # Calculate new balances after payment
+        new_interest = order.accrued_interest - interest_payment
+        new_principal = order.remaining_principal - principal_payment
+        will_be_fully_paid = new_principal <= 0 and new_interest <= 0
+        
+        # Generate payment session
+        from django.utils.crypto import get_random_string
+        payment_session = get_random_string(64)
+        
+        # Store in session
+        session_data = {
+            'session_id': payment_session,
+            'user_id': user.id,
+            'order_id': order.id,
+            'amount': str(amount),
+            'created_at': timezone.now().isoformat(),
+        }
+        
+        request.session['pending_repayment'] = session_data
+        request.session.modified = True
+        
+        # Return breakdown
+        return Response({
+            'payment_session': payment_session,
+            'breakdown': {
+                'payment_amount': str(amount),
+                'interest_payment': str(interest_payment),
+                'principal_payment': str(principal_payment),
+                
+                # Current status
+                'current_interest': str(order.accrued_interest),
+                'current_principal': str(order.remaining_principal),
+                'current_total_due': str(order.total_amount_due),
+                
+                # After payment
+                'remaining_interest': str(new_interest),
+                'remaining_principal': str(new_principal),
+                'remaining_total_due': str(new_interest + new_principal),
+                'will_be_fully_paid': will_be_fully_paid,
+                
+                # Loan info
+                'days_elapsed': order.days_elapsed,
+                'days_remaining': order.days_remaining,
+                'is_full_payment': will_be_fully_paid,
+                'early_payment_bonus_eligible': order.days_elapsed <= 30 and will_be_fully_paid,
+            },
+            'message': 'Review payment details and confirm to proceed'
+        }, status=status.HTTP_200_OK)
+        
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Active loan not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def confirm_loan_repayment(request):
+    """
+    Step 2: Confirm repayment after dummy payment
+    """
+    user = request.user
+    payment_session = request.data.get('payment_session')
+    payment_reference = request.data.get('payment_reference', 'DUMMY_PAYMENT')
+    
+    if not payment_session:
+        return Response(
+            {'error': 'Payment session is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Verify session
+    pending_repayment = request.session.get('pending_repayment')
+    
+    if not pending_repayment:
+        return Response(
+            {'error': 'Invalid or expired payment session'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if pending_repayment.get('session_id') != payment_session:
+        return Response(
+            {'error': 'Invalid payment session'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if pending_repayment.get('user_id') != user.id:
+        return Response(
+            {'error': 'Session belongs to different user'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+    
+    try:
+        with transaction.atomic():
+            from decimal import Decimal
+            
+            order_id = pending_repayment.get('order_id')
+            amount = Decimal(pending_repayment.get('amount'))
+            
+            # Get order
+            order = Order.objects.select_for_update().get(
+                id=order_id,
+                buyer=user
+            )
+            
+            # Update interest
+            order.update_accrued_interest()
+            
+            # Process payment
+            payment_result = order.process_partial_payment(amount)
+            
+            # Get credit account
+            credit_account = user.credit_account
+            old_balance = credit_account.credit_balance
+            
+            # Restore credit (principal + interest paid)
+            total_paid = Decimal(str(payment_result['interest_paid'])) + Decimal(str(payment_result['principal_paid']))
+            credit_account.credit_balance += total_paid
+            credit_account.total_credit_used -= total_paid
+            
+            # Check if fully repaid
+            if order.is_fully_paid:
+                credit_account.loan_status = 'ACTIVE'
+            
+            credit_account.save()
+            
+            # Record transaction
+            from credits.models import CreditTransaction
+            CreditTransaction.objects.create(
+                credit_account=credit_account,
+                transaction_type=CreditTransaction.TransactionType.REPAYMENT,
+                amount=total_paid,
+                balance_before=old_balance,
+                balance_after=credit_account.credit_balance,
+                description=f"Loan repayment - Order {order.order_number}",
+                reference=payment_reference
+            )
+            
+            # Clear session
+            if 'pending_repayment' in request.session:
+                del request.session['pending_repayment']
+                request.session.modified = True
+            
+            return Response({
+                'success': True,
+                'message': 'Repayment processed successfully!',
+                'payment': {
+                    'amount_paid': str(total_paid),
+                    'interest_paid': str(payment_result['interest_paid']),
+                    'principal_paid': str(payment_result['principal_paid']),
+                    'is_fully_paid': payment_result['is_fully_paid'],
+                },
+                'credit_account': {
+                    'new_balance': str(credit_account.credit_balance),
+                    'available_credit': str(credit_account.credit_balance),
+                },
+                'loan_status': {
+                    'remaining_principal': str(payment_result['remaining_principal']),
+                    'remaining_interest': str(payment_result['remaining_interest']),
+                    'is_fully_paid': payment_result['is_fully_paid'],
+                }
+            }, status=status.HTTP_200_OK)
+            
+    except Order.DoesNotExist:
+        return Response(
+            {'error': 'Order not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response(
+            {'error': str(e)},
+            status=status.HTTP_400_BAD_REQUEST
+        )

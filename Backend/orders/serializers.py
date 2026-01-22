@@ -92,13 +92,19 @@ class OrderListSerializer(serializers.ModelSerializer):
     can_cancel = serializers.SerializerMethodField()
     cancellation_info = serializers.SerializerMethodField()
     
+    # NEW: Add payment status
+    payment_status = serializers.SerializerMethodField()
+    amount_due = serializers.SerializerMethodField()
+    
     class Meta:
         model = Order
         fields = [
             'id', 'order_number', 'buyer', 'buyer_name',
             'seller', 'seller_name', 'total_amount',
             'status', 'items_count', 'created_at',
-            'is_cancelled', 'cancelled_at', 'can_cancel', 'cancellation_info'
+            'is_cancelled', 'cancelled_at', 'can_cancel', 'cancellation_info',
+            # NEW
+            'payment_status', 'amount_due',
         ]
     
     def get_items_count(self, obj):
@@ -109,6 +115,23 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_cancellation_info(self, obj):
         return obj.get_cancellation_info()
+    
+    def get_payment_status(self, obj):
+        """Simple payment status for list view"""
+        if obj.is_fully_paid:
+            return 'PAID'
+        if obj.is_overdue:
+            return 'OVERDUE'
+        if obj.is_in_grace_period:
+            return 'GRACE_PERIOD'
+        return 'ACTIVE'
+    
+    def get_amount_due(self, obj):
+        """Total amount due (for list view)"""
+        if obj.upfront_payment_status == 'PAID':
+            obj.update_accrued_interest()
+            return str(obj.total_amount_due)
+        return '0.00'
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
@@ -122,6 +145,10 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     can_cancel = serializers.SerializerMethodField()
     cancellation_info = serializers.SerializerMethodField()
     
+    # NEW: BNPL Fields
+    loan_details = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
+    
     class Meta:
         model = Order
         fields = [
@@ -133,6 +160,8 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'created_at', 'confirmed_at', 'completed_at',
             'is_cancelled', 'cancelled_at', 'cancellation_reason', 
             'can_cancel', 'cancellation_info',
+            # NEW BNPL fields
+            'loan_details', 'payment_status',
         ]
     
     def get_buyer_phone(self, obj):
@@ -142,10 +171,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         return getattr(obj.buyer, 'address', None)
     
     def get_seller_info(self, obj):
-        """Get seller information - simplified and safe version"""
+        """Get seller information"""
         seller = obj.seller
         
-        # Build store name
         if seller.first_name and seller.last_name:
             store_name = f"{seller.first_name} {seller.last_name}'s Store"
         elif seller.first_name:
@@ -160,9 +188,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'phone_number': getattr(seller, 'phone_number', None),
         }
         
-        # Try to get location info safely
         try:
-            # Default location
             location_data = {
                 'store_name': store_name,
                 'address': 'Jos, Plateau State, Nigeria',
@@ -172,26 +198,21 @@ class OrderDetailSerializer(serializers.ModelSerializer):
                 'is_primary': True
             }
             
-            # Check if seller has profile
             if hasattr(seller, 'seller_profile'):
                 profile = seller.seller_profile
                 
-                # Try to get business address from profile
                 if hasattr(profile, 'business_address') and profile.business_address:
                     location_data['address'] = profile.business_address
                 
-                # Try to get city/state from profile
                 if hasattr(profile, 'city') and profile.city:
                     location_data['city'] = profile.city
                 
                 if hasattr(profile, 'state') and profile.state:
                     location_data['state'] = profile.state
                 
-                # Try to get phone from profile
                 if hasattr(profile, 'phone_number') and profile.phone_number:
                     location_data['phone_number'] = profile.phone_number
             
-            # Fallback to user's address if available
             if not hasattr(seller, 'seller_profile') or not location_data['address']:
                 user_address = getattr(seller, 'address', None)
                 if user_address:
@@ -200,8 +221,6 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             seller_data['primary_location'] = location_data
             
         except Exception as e:
-            # If anything fails, just provide basic info
-            print(f"Warning: Could not get seller location info: {str(e)}")
             seller_data['primary_location'] = {
                 'store_name': store_name,
                 'address': 'Jos, Plateau State, Nigeria',
@@ -213,12 +232,87 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         
         return seller_data
     
-
     def get_can_cancel(self, obj):
         return obj.can_be_cancelled()
 
     def get_cancellation_info(self, obj):
         return obj.get_cancellation_info()
+    
+    # NEW METHODS
+    def get_loan_details(self, obj):
+        """Return BNPL loan details"""
+        if obj.upfront_payment_status != 'PAID':
+            return None
+        
+        # Update interest before returning
+        obj.update_accrued_interest()
+        
+        return {
+            # Payment breakdown
+            'upfront_payment': str(obj.upfront_payment),
+            'upfront_paid': obj.upfront_payment_status == 'PAID',
+            'loan_amount': str(obj.loan_amount),
+            'principal_amount': str(obj.principal_amount),
+            
+            # Interest details
+            'service_fee_rate': str(obj.service_fee_rate),
+            'total_service_fee_30_days': str(obj.total_service_fee),
+            'daily_interest_rate': str(obj.daily_interest_rate),
+            'accrued_interest': str(obj.accrued_interest),
+            
+            # Timeline
+            'loan_start_date': obj.loan_start_date.isoformat() if obj.loan_start_date else None,
+            'loan_due_date': obj.loan_due_date.isoformat() if obj.loan_due_date else None,
+            'grace_period_end': obj.grace_period_end_date.isoformat() if obj.grace_period_end_date else None,
+            'days_elapsed': obj.days_elapsed,
+            'days_remaining': obj.days_remaining,
+            'is_in_grace_period': obj.is_in_grace_period,
+            'is_overdue': obj.is_overdue,
+            
+            # Payment status
+            'principal_paid': str(obj.principal_paid),
+            'interest_paid': str(obj.interest_paid),
+            'remaining_principal': str(obj.remaining_principal),
+            'total_amount_due': str(obj.total_amount_due),
+            'is_fully_paid': obj.is_fully_paid,
+            'last_payment_date': obj.last_payment_date.isoformat() if obj.last_payment_date else None,
+        }
+    
+    def get_payment_status(self, obj):
+        """Get user-friendly payment status"""
+        if obj.is_fully_paid:
+            return {
+                'status': 'PAID',
+                'message': 'Loan fully paid',
+                'color': 'green'
+            }
+        
+        if obj.is_overdue:
+            return {
+                'status': 'OVERDUE',
+                'message': f'Payment overdue! Grace period ended. Credit bureau report pending.',
+                'color': 'red'
+            }
+        
+        if obj.is_in_grace_period:
+            return {
+                'status': 'GRACE_PERIOD',
+                'message': f'In grace period. {obj.days_remaining} days before reporting.',
+                'color': 'orange'
+            }
+        
+        if obj.days_remaining <= 7:
+            return {
+                'status': 'DUE_SOON',
+                'message': f'Payment due in {obj.days_remaining} days',
+                'color': 'yellow'
+            }
+        
+        return {
+            'status': 'ACTIVE',
+            'message': f'{obj.days_remaining} days remaining',
+            'color': 'blue'
+        }
     
 
 

@@ -7,6 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  withCredentials: true,  // CRITICAL: Send cookies with requests
 });
 
 // Add auth token to requests
@@ -61,7 +62,9 @@ api.interceptors.response.use(
   }
 );
 
+// ========================================
 // AUTHENTICATION
+// ========================================
 export const authAPI = {
   register: (data) => api.post('/accounts/register/', data),
   login: (data) => api.post('/accounts/login/', data),
@@ -75,7 +78,9 @@ export const authAPI = {
   updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
 };
 
+// ========================================
 // SHOP - PRODUCTS & CATEGORIES
+// ========================================
 export const shopAPI = {
   // Categories
   getCategories: () => api.get('/shop/categories/'),
@@ -94,22 +99,12 @@ export const shopAPI = {
   // Seller Inventory
   getMyProducts: (params) => api.get('/shop/inventory/', { params }),
 
-  // Backend route: path('store-locations/', views.store_location_list)
+  // Store Locations
   getStoreLocations: () => api.get('/shop/store-locations/'),
-  
-  // Backend accepts POST on same endpoint
   createStoreLocation: (data) => api.post('/shop/store-locations/', data),
-  
-  // Backend route: path('store-locations/<int:pk>/')
   getStoreLocation: (id) => api.get(`/shop/store-locations/${id}/`),
-  
-  // Backend route: path('store-locations/<int:pk>/update/')
   updateStoreLocation: (id, data) => api.patch(`/shop/store-locations/${id}/update/`, data),
-  
-  // Backend route: path('store-locations/<int:pk>/delete/')
   deleteStoreLocation: (id) => api.delete(`/shop/store-locations/${id}/delete/`),
-  
-  // Backend route: path('store-locations/<int:pk>/set-primary/')
   setStorePrimary: (id) => api.post(`/shop/store-locations/${id}/set-primary/`),
   
   // Reviews
@@ -119,7 +114,9 @@ export const shopAPI = {
   deleteReview: (reviewId) => api.delete(`/shop/reviews/${reviewId}/delete/`),
 };
 
+// ========================================
 // CART
+// ========================================
 export const cartAPI = {
   getCart: () => api.get('/orders/cart/'),
   addToCart: (data) => api.post('/orders/cart/add/', data),
@@ -128,12 +125,15 @@ export const cartAPI = {
   clearCart: () => api.delete('/orders/cart/clear/'),
 };
 
+// ========================================
 // ORDERS
+// ========================================
 export const orderAPI = {
-  // Checkout
-  checkout: () => api.post('/orders/checkout/'),
+  // BNPL Checkout Flow
+  initiateCheckout: () => api.post('/orders/checkout/'),
+  confirmCheckout: (data) => api.post('/orders/confirm-checkout/', data),
   
-  // Order Management
+  // Orders
   getMyOrders: (params) => api.get('/orders/', { params }),
   getOrderDetail: (orderId) => api.get(`/orders/${orderId}/`),
   
@@ -148,17 +148,28 @@ export const orderAPI = {
   // Seller Actions
   confirmOrder: (orderId, data) => api.post(`/orders/${orderId}/confirm/`, data),
   completeOrder: (orderId) => api.post(`/orders/${orderId}/complete/`),
+  
+  // Loan Management
+  makePartialPayment: (orderId, data) => api.post(`/orders/${orderId}/partial-payment/`, data),
+  getLoanDetails: (orderId) => api.get(`/orders/${orderId}/loan-details/`),
 };
 
-// CREDITS
+// ========================================
+// CREDITS & LOANS
+// ========================================
 export const creditAPI = {
-  // BUYER ENDPOINTS
+  // BUYER - Credit Account
   getMyCreditAccount: () => api.get('/credits/account/'),
   getMyCreditTransactions: () => api.get('/credits/transactions/'),
   getMyRepaymentHistory: () => api.get('/credits/repayments/'),
   initiateBuyerRepayment: (amount) => api.post('/credits/initiate-repayment/', { amount }),
   
-  // ADMIN ENDPOINTS
+  // BUYER - Loan Management (NEW - BNPL)
+  getMyActiveLoans: () => api.get('/credits/active-loans/'),
+  initiateLoanRepayment: (data) => api.post('/credits/loans/repay/initiate/', data),
+  confirmLoanRepayment: (data) => api.post('/credits/loans/repay/confirm/', data),
+  
+  // ADMIN - Credit Management
   getAllCreditAccounts: (params) => api.get('/credits/accounts/', { params }),
   getCreditAccountDetail: (userId) => api.get(`/credits/accounts/${userId}/`),
   increaseCreditLimit: (userId, data) => api.post(`/credits/accounts/${userId}/increase-limit/`, data),
@@ -166,7 +177,9 @@ export const creditAPI = {
   getAllCreditLimitHistory: (params) => api.get('/credits/limit-history/', { params }),
 };
 
+// ========================================
 // ADMIN/MANAGEMENT
+// ========================================
 export const adminAPI = {
   // User Management
   getAllUsers: (params) => api.get('/accounts/users/', { params }),

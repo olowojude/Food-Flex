@@ -402,7 +402,7 @@ export default function ProductDetailPage() {
               </div>
               
               <p className="text-xs text-gray-500 mt-4 p-3 bg-blue-50 rounded border border-blue-200">
-                💡 <strong>Tip:</strong> You can discuss your preferred pickup location with the seller after placing your order.
+                <strong>Tip:</strong> You can discuss your preferred pickup location with the seller after placing your order.
               </p>
             </div>
           </div>

@@ -44,8 +44,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise for static files
-    'corsheaders.middleware.CorsMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # ✅ MUST be before SessionMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -134,7 +134,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 30,  # Updated to 30 as per documentation
+    'PAGE_SIZE': 30,
     'DEFAULT_FILTER_BACKENDS': [
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
@@ -159,18 +159,14 @@ SIMPLE_JWT = {
     'AUTH_COOKIE_SAMESITE': 'Lax',
 }
 
-
 # CORS Settings
 cors_origins_str = env('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000')
 
-# Split by comma and strip whitespace
 CORS_ALLOWED_ORIGINS = [
     origin.strip() 
     for origin in cors_origins_str.split(',') 
     if origin.strip()
 ]
-
-# CORS_ALLOW_ALL_ORIGINS = DEBUG  
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -203,13 +199,38 @@ CSRF_TRUSTED_ORIGINS = [
     if origin.strip()
 ]
 
-# Cookie settings for cross-origin requests
-SESSION_COOKIE_SAMESITE = 'None'
-CSRF_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True 
-CSRF_COOKIE_SECURE = True    
+# ========================================
+# 🔧 CRITICAL SESSION CONFIGURATION FIX
+# ========================================
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 1209600  # 2 weeks
+SESSION_SAVE_EVERY_REQUEST = True  # ✅ Force save on every request
+SESSION_COOKIE_HTTPONLY = True
+
+# ✅ LOCAL DEVELOPMENT (HTTP)
+if DEBUG:
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SECURE = False
+else:
+    # ✅ PRODUCTION (HTTPS)
+    SESSION_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SECURE = True
+    
+    SECURE_SSL_REDIRECT = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
-CORS_PREFLIGHT_MAX_AGE = 86400 
+CORS_PREFLIGHT_MAX_AGE = 86400
 
 DEFAULT_CREDIT_LIMIT = 50000 
 CURRENCY_SYMBOL = '₦'
@@ -217,44 +238,10 @@ CURRENCY_SYMBOL = '₦'
 HYDROGEN_SECRET_KEY = os.environ.get('HYDROGEN_SECRET_KEY')
 HYDROGEN_PUBLIC_KEY = os.environ.get('HYDROGEN_PUBLIC_KEY')
 
-# For webhook callback
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
-
-# # Cloudinary Configuration (Optional - for image hosting)
-# CLOUDINARY_CLOUD_NAME = env('CLOUDINARY_CLOUD_NAME', default='')
-# CLOUDINARY_API_KEY = env('CLOUDINARY_API_KEY', default='')
-# CLOUDINARY_API_SECRET = env('CLOUDINARY_API_SECRET', default='')
-
-# if CLOUDINARY_CLOUD_NAME:
-#     try:
-#         import cloudinary
-#         cloudinary.config(
-#             cloud_name=CLOUDINARY_CLOUD_NAME,
-#             api_key=CLOUDINARY_API_KEY,
-#             api_secret=CLOUDINARY_API_SECRET,
-#             secure=True
-#         )
-#     except ImportError:
-#         pass  # Cloudinary not installed
-
-if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    
-    SECURE_BROWSER_XSS_FILTER = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'DENY'
-    
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Jazzmin Configuration
 JAZZMIN_SETTINGS = {
-    # Site branding
     "site_title": "FoodFlex Admin",
     "site_header": "FoodFlex",
     "site_brand": "FoodFlex Management",
@@ -262,21 +249,17 @@ JAZZMIN_SETTINGS = {
     "welcome_sign": "Welcome to FoodFlex Admin Panel",
     "copyright": "FoodFlex 2024",
     
-    # Search bar
     "search_model": ["accounts.User", "shop.Product", "orders.Order"],
     
-    # Top menu links
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
         {"name": "View Site", "url": "/", "new_window": True},
     ],
     
-    # User menu links
     "usermenu_links": [
         {"model": "accounts.user"},
     ],
     
-    # Side menu ordering
     "order_with_respect_to": [
         "accounts", 
         "shop", 
@@ -284,7 +267,6 @@ JAZZMIN_SETTINGS = {
         "credits"
     ],
     
-    # Custom icons (Font Awesome)
     "icons": {
         "accounts.user": "fas fa-users",
         "accounts.sellerprofile": "fas fa-store",
@@ -297,20 +279,16 @@ JAZZMIN_SETTINGS = {
         "credits.repaymenthistory": "fas fa-money-bill-wave",
     },
     
-    # Hide apps/models
     "hide_apps": [],
     "hide_models": [],
     
-    # Show related models
     "related_modal_active": True,
     
-    # UI tweaks
     "show_sidebar": True,
     "navigation_expanded": True,
     "changeform_format": "horizontal_tabs",
 }
 
-# Jazzmin UI Tweaks
 JAZZMIN_UI_TWEAKS = {
     "navbar_small_text": False,
     "footer_small_text": False,
@@ -330,7 +308,6 @@ JAZZMIN_UI_TWEAKS = {
     "theme": "default",
 }
 
-# Logging Configuration
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
