@@ -35,6 +35,9 @@ function ProfileContent() {
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   
+  // ✅ NEW: Track refresh trigger for child components
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  
   // Cancel order state
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -73,6 +76,7 @@ function ProfileContent() {
     }
   }, [isAuthenticated, isLoading, user, router]);
 
+  // ✅ ENHANCED: Comprehensive data fetch
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -82,14 +86,19 @@ function ProfileContent() {
           creditAPI.getMyCreditTransactions(),
           orderAPI.getMyOrders(),
         ]);
+        
         setCreditAccount(creditRes.data);
         setTransactions(transactionsRes.data.slice(0, 5));
         
         const ordersData = ordersRes.data.results || ordersRes.data.orders || ordersRes.data;
         setOrders(Array.isArray(ordersData) ? ordersData.slice(0, 5) : []);
+        
+        // ✅ Trigger refresh in child components
+        setRefreshTrigger(prev => prev + 1);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
+      showToast('Failed to refresh data', 'error');
     } finally {
       setLoading(false);
     }
@@ -157,6 +166,7 @@ function ProfileContent() {
     setShowRepaymentModal(true);
   };
 
+  // ✅ ENHANCED: Repayment with full refresh
   const handleRepaymentSubmit = async (orderId, amount) => {
     try {
       setProcessingPayment(true);
@@ -182,27 +192,59 @@ function ProfileContent() {
       
       showToast(confirmRes.data.message || 'Repayment successful!', 'success');
       
-      // Close modal and refresh data
+      // ✅ CRITICAL: Close modal FIRST, then refresh
       setShowRepaymentModal(false);
       setSelectedLoan(null);
+      setProcessingPayment(false);
+      
+      // ✅ Wait a bit for backend to finalize
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // ✅ Comprehensive refresh
       await fetchData();
       
-      // If on loans tab, it will auto-refresh via child component
+      // ✅ Show updated credit
+      const creditRes = await creditAPI.getMyCreditAccount();
+      showToast(
+        `✅ Payment processed! Available credit: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
+        'success'
+      );
       
     } catch (error) {
       showToast(error.response?.data?.error || 'Failed to process payment', 'error');
-    } finally {
       setProcessingPayment(false);
     }
   };
 
+  // ✅ ENHANCED: Cancellation with full refresh
   const handleCancelOrder = async (orderId, reason) => {
     try {
       const response = await orderAPI.cancelOrder(orderId, { reason });
       
-      showToast(response.data.message || 'Order cancelled successfully!', 'success');
+      // ✅ Show detailed refund info
+      const refundInfo = response.data.refunded_amount || {};
+      const creditRefund = refundInfo.credit_refund || 0;
+      const upfrontRefund = refundInfo.upfront_refund || 0;
       
+      showToast(
+        response.data.message || 
+        `Order cancelled! Credit refund: ₦${creditRefund.toLocaleString()}, Upfront refund: ₦${upfrontRefund.toLocaleString()}`,
+        'success'
+      );
+      
+      // ✅ Wait for backend to process
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // ✅ Comprehensive refresh
       await fetchData();
+      
+      // ✅ Show updated credit
+      const creditRes = await creditAPI.getMyCreditAccount();
+      showToast(
+        `✅ Credit restored! Available: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
+        'success'
+      );
+      
     } catch (err) {
       showToast(err.response?.data?.error || 'Failed to cancel order', 'error');
       throw err;
@@ -296,6 +338,7 @@ function ProfileContent() {
               <OrdersTab
                 orders={orders}
                 onCancelOrder={openCancelModal}
+                key={`orders-${refreshTrigger}`} // ✅ Force refresh
               />
             )}
 
@@ -303,13 +346,15 @@ function ProfileContent() {
               <CreditTab
                 creditAccount={creditAccount}
                 transactions={transactions}
-                onRepaymentClick={() => setActiveTab('loans')} // Switch to Loans tab
+                onRepaymentClick={() => setActiveTab('loans')}
+                key={`credit-${refreshTrigger}`} // ✅ Force refresh
               />
             )}
 
             {activeTab === 'loans' && isBuyer && (
               <ActiveLoansTab
                 onRepayClick={handleRepaymentClick}
+                key={`loans-${refreshTrigger}`} // ✅ Force refresh
               />
             )}
 

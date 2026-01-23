@@ -14,10 +14,12 @@ export default function ActiveLoansTab({ onRepayClick }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [lastFetch, setLastFetch] = useState(Date.now());
 
+  // ✅ Auto-refresh every time component mounts or parent triggers refresh
   useEffect(() => {
     fetchActiveLoans();
-  }, []);
+  }, [lastFetch]); // ✅ Will refresh when parent changes key
 
   const fetchActiveLoans = async () => {
     try {
@@ -60,7 +62,7 @@ export default function ActiveLoansTab({ onRepayClick }) {
           No Active Loans
         </h3>
         <p className="text-gray-600">
-          You have no outstanding loan balances. Great job! 
+          You have no outstanding loan balances. Great job! 🎉
         </p>
       </div>
     );
@@ -150,12 +152,12 @@ export default function ActiveLoansTab({ onRepayClick }) {
           <Calendar className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
           <div>
             <h3 className="font-semibold text-green-900 mb-2">
-              Save Money with Early Repayment!
+              💰 Save Money with Early Repayment!
             </h3>
             <ul className="space-y-1 text-sm text-green-800">
               <li>• Interest accrues daily at 0.283% per day</li>
               <li>• Pay earlier to reduce total interest paid</li>
-              <li>• Full payment within 30 days = 5% credit bonus!</li>
+              <li>• Full payment within 30 days = 5% credit bonus! 🎁</li>
               <li>• You can make partial payments anytime</li>
             </ul>
           </div>

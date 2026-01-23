@@ -289,11 +289,7 @@ def checkout(request):
         request.session['pending_checkout'] = session_data
         request.session.modified = True  # ✅ CRITICAL: Force save
         
-        # DEBUG logging
-        print(f"✅ Session saved: {checkout_session}")
-        print(f"✅ User ID: {user.id}")
-        print(f"✅ Total: {total_amount}")
-        
+    
         # Return payment breakdown
         return Response({
             'checkout_session': checkout_session,
@@ -333,6 +329,7 @@ def checkout(request):
 def confirm_checkout(request):
     """
     Step 2: Confirm checkout after dummy payment
+    NOTE: Loan is NOT activated here - only when seller confirms order
     """
     user = request.user
     checkout_session = request.data.get('checkout_session')
@@ -344,25 +341,17 @@ def confirm_checkout(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # DEBUG logging
-    print(f"🔍 Confirm checkout for session: {checkout_session}")
-    print(f"🔍 Session keys: {list(request.session.keys())}")
-    
     # Verify session
     pending_checkout = request.session.get('pending_checkout')
     
     if not pending_checkout:
-        print(f"❌ No session data found!")
         return Response(
             {'error': 'Invalid or expired checkout session. Please try again.'},
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    print(f"✅ Session data found: {pending_checkout}")
-    
     # Validate session ID
     if pending_checkout.get('session_id') != checkout_session:
-        print(f"❌ Session ID mismatch!")
         return Response(
             {'error': 'Invalid checkout session'},
             status=status.HTTP_400_BAD_REQUEST
@@ -370,7 +359,6 @@ def confirm_checkout(request):
     
     # Validate user ID
     if pending_checkout.get('user_id') != user.id:
-        print(f"❌ User ID mismatch!")
         return Response(
             {'error': 'Session belongs to different user'},
             status=status.HTTP_403_FORBIDDEN
@@ -433,11 +421,16 @@ def confirm_checkout(request):
                     upfront_payment_reference=payment_reference
                 )
                 
-                # Calculate and set loan details
+                # Calculate loan details (but DON'T activate yet)
                 order.calculate_loan_details()
                 
-                # Activate loan (mark upfront as paid)
-                order.activate_loan()
+                # Mark upfront as PAID (10% received)
+                order.upfront_payment_status = 'PAID'
+                
+                # ✅ DON'T activate loan yet - wait for confirmation
+                # order.activate_loan()  ← REMOVED
+                
+                order.save()
                 
                 # Create order items and reduce stock
                 for cart_item in seller_items:
@@ -497,7 +490,7 @@ def confirm_checkout(request):
                 amount=total_amount,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"BNPL Purchase - {len(created_orders)} order(s) - 10% upfront paid",
+                description=f"BNPL Purchase - {len(created_orders)} order(s) - Pending confirmation (loan will activate upon seller confirmation)",
                 reference=checkout_session
             )
             
@@ -509,14 +502,13 @@ def confirm_checkout(request):
                 del request.session['pending_checkout']
                 request.session.modified = True
             
-            print(f"✅ Checkout completed successfully!")
-            
             # Serialize orders
+            from .serializers import OrderDetailSerializer
             serialized_orders = OrderDetailSerializer(created_orders, many=True).data
             
             return Response({
                 'success': True,
-                'message': f'Checkout successful! {len(created_orders)} order(s) created.',
+                'message': f'Checkout successful! {len(created_orders)} order(s) created. Show QR code to seller to collect items.',
                 'orders': serialized_orders,
                 'order_count': len(created_orders),
                 'order_ids': order_ids,
@@ -527,7 +519,9 @@ def confirm_checkout(request):
                     'upfront_paid': float(created_orders[0].upfront_payment) if created_orders else 0,
                     'total_loan': float(total_amount),
                     'principal_owed': float(created_orders[0].principal_amount) if created_orders else 0,
-                    'service_fee_estimate': float(created_orders[0].total_service_fee) if created_orders else 0
+                    'service_fee_estimate': float(created_orders[0].total_service_fee) if created_orders else 0,
+                    'loan_status': 'PENDING_CONFIRMATION',
+                    'note': 'Interest will start counting when seller confirms your order'
                 }
             }, status=status.HTTP_201_CREATED)
             
@@ -537,7 +531,6 @@ def confirm_checkout(request):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        print(f"❌ Confirm error: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response(

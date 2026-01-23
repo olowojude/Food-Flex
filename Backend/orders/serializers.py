@@ -240,14 +240,33 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     
     # NEW METHODS
     def get_loan_details(self, obj):
-        """Return BNPL loan details"""
+    # ✅ Only show loan details if upfront paid AND loan activated
         if obj.upfront_payment_status != 'PAID':
-            return None
+            return {
+                'status': 'UPFRONT_PENDING',
+                'message': '10% upfront payment required'
+            }
         
+        # ✅ Check if loan is activated (seller confirmed)
+        if not obj.loan_start_date:
+            return {
+                'status': 'PENDING_CONFIRMATION',
+                'upfront_payment': str(obj.upfront_payment),
+                'upfront_paid': True,
+                'loan_amount': str(obj.loan_amount),
+                'principal_amount': str(obj.principal_amount),
+                'service_fee_estimate': str(obj.total_service_fee),
+                'message': 'Waiting for seller to confirm order. Interest will start counting after confirmation.',
+                'order_status': obj.status,
+            }
+        
+        # ✅ Loan is active - show full details
         # Update interest before returning
         obj.update_accrued_interest()
         
         return {
+            'status': 'ACTIVE',
+            
             # Payment breakdown
             'upfront_payment': str(obj.upfront_payment),
             'upfront_paid': obj.upfront_payment_status == 'PAID',
@@ -277,9 +296,27 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'is_fully_paid': obj.is_fully_paid,
             'last_payment_date': obj.last_payment_date.isoformat() if obj.last_payment_date else None,
         }
+
+
     
     def get_payment_status(self, obj):
         """Get user-friendly payment status"""
+        # ✅ Check if loan is even activated
+        if not obj.loan_start_date:
+            if obj.upfront_payment_status == 'PAID':
+                return {
+                    'status': 'PENDING_CONFIRMATION',
+                    'message': f'Order is {obj.status}. Loan will activate when seller confirms.',
+                    'color': 'blue'
+                }
+            else:
+                return {
+                    'status': 'UPFRONT_PENDING',
+                    'message': '10% upfront payment required',
+                    'color': 'orange'
+                }
+        
+        # ✅ Loan is active - check payment status
         if obj.is_fully_paid:
             return {
                 'status': 'PAID',

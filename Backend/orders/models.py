@@ -380,6 +380,7 @@ class Order(models.Model):
         return self.status == self.OrderStatus.PENDING and not self.is_cancelled
     
     def cancel_order_by_buyer(self, buyer, reason=None):
+
         if not self.can_be_cancelled():
             return False, "This order cannot be cancelled. Only pending orders can be cancelled.", 0
         
@@ -406,13 +407,22 @@ class Order(models.Model):
                     item.product.stock_quantity += item.quantity
                     item.product.save(update_fields=['stock_quantity'])
             
-            # Refund credit to buyer
-            refund_amount = self.total_amount
+            # Get credit account
             credit_account = self.buyer.credit_account
-            
             old_balance = credit_account.credit_balance
-            credit_account.credit_balance += refund_amount
-            credit_account.total_credit_used -= refund_amount
+            
+            # Calculate refund amounts
+            from decimal import Decimal
+            
+            # 1. Refund the FULL loan amount (credit that was deducted)
+            credit_refund = self.loan_amount  # Full ₦10,000
+            
+            # 2. Refund the 10% upfront payment (to actual wallet/account)
+            upfront_refund = self.upfront_payment  # ₦1,000
+            
+            # Restore credit
+            credit_account.credit_balance += credit_refund
+            credit_account.total_credit_used -= credit_refund
             
             # Update loan status if needed
             if credit_account.loan_status == 'EXHAUSTED':
@@ -420,27 +430,66 @@ class Order(models.Model):
             
             credit_account.save()
             
-            # Create refund transaction record
+            # Create credit refund transaction
             CreditTransaction.objects.create(
                 credit_account=credit_account,
                 transaction_type=CreditTransaction.TransactionType.ADJUSTMENT,
-                amount=refund_amount,
+                amount=credit_refund,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"Refund - Order {self.order_number} cancelled: {reason or 'No reason provided'}",
-                reference=self.order_number
+                description=f"Credit refund - Order {self.order_number} cancelled: {reason or 'No reason provided'}",
+                reference=f"CANCEL_{self.order_number}"
             )
             
+            # TODO: In production, refund the 10% upfront to buyer's bank account
+            # For now, we just track it
+            self.upfront_payment_status = 'REFUNDED'
+            
             # Update notes
-            if reason:
-                self.notes = f"Cancelled by buyer: {reason}"
+            refund_note = f"Cancelled by buyer: {reason or 'No reason provided'}\n"
+            refund_note += f"Credit refunded: ₦{float(credit_refund):,.2f}\n"
+            refund_note += f"Upfront payment to be refunded: ₦{float(upfront_refund):,.2f}"
+            self.notes = refund_note
             
             self.save()
             
-            return True, "Order cancelled successfully. Credit has been refunded to your account.", float(refund_amount)
+            return True, f"Order cancelled successfully. ₦{float(credit_refund):,.2f} credit restored. ₦{float(upfront_refund):,.2f} will be refunded to your account.", {
+                'credit_refund': float(credit_refund),
+                'upfront_refund': float(upfront_refund),
+                'total_refund': float(credit_refund + upfront_refund)
+            }
             
         except Exception as e:
             return False, f"Error cancelling order: {str(e)}", 0
+        
+    
+        # ADD this new method for auto-cancellation
+    def auto_cancel_if_expired(self):
+
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Only auto-cancel PENDING orders
+        if self.status != self.OrderStatus.PENDING or self.is_cancelled:
+            return False, "Order not eligible for auto-cancellation"
+        
+        # Check if order is older than 3 days
+        three_days_ago = timezone.now() - timedelta(days=3)
+        
+        if self.created_at <= three_days_ago:
+            # Auto-cancel
+            success, message, refunds = self.cancel_order_by_buyer(
+                buyer=self.buyer,
+                reason="Auto-cancelled: Order not confirmed within 3 days"
+            )
+            
+            if success:
+                return True, f"Order {self.order_number} auto-cancelled after 3 days"
+            else:
+                return False, f"Failed to auto-cancel: {message}"
+        
+        return False, "Order not yet expired"
+
     
     def get_cancellation_info(self):
         if not self.is_cancelled:
@@ -463,8 +512,14 @@ class Order(models.Model):
         if confirmed_by_seller.id != self.seller.id:
             raise ValueError("Only the assigned seller can confirm this order")
         
+        # Update order status
         self.status = self.OrderStatus.CONFIRMED
         self.confirmed_at = timezone.now()
+        
+        # ✅ ACTIVATE LOAN NOW (not at checkout)
+        if self.upfront_payment_status == 'PAID' and not self.loan_start_date:
+            self.activate_loan()
+        
         self.save()
     
     def complete_order(self):

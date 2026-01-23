@@ -424,6 +424,7 @@ from orders.models import Order
 def get_active_loans(request):
     """
     Get all active loans for the logged-in buyer with current interest
+    NOTE: Only CONFIRMED orders with activated loans appear here
     """
     user = request.user
     
@@ -433,12 +434,13 @@ def get_active_loans(request):
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # Get all orders with active loans
+    # ✅ ONLY get CONFIRMED orders with activated loans
     active_loans = Order.objects.filter(
         buyer=user,
         upfront_payment_status='PAID',
         is_fully_paid=False,
-        loan_start_date__isnull=False
+        loan_start_date__isnull=False,  # ← CRITICAL: Only activated loans
+        status__in=['CONFIRMED', 'COMPLETED']  # ← Only confirmed/completed orders
     ).select_related('seller').prefetch_related('items__product')
     
     # Update interest for all loans
@@ -640,6 +642,7 @@ def initiate_loan_repayment(request):
 def confirm_loan_repayment(request):
     """
     Step 2: Confirm repayment after dummy payment
+    Updates credit balance and loan status correctly
     """
     user = request.user
     payment_session = request.data.get('payment_session')
@@ -695,13 +698,24 @@ def confirm_loan_repayment(request):
             credit_account = user.credit_account
             old_balance = credit_account.credit_balance
             
-            # Restore credit (principal + interest paid)
+            # ✅ Restore credit (principal + interest paid)
             total_paid = Decimal(str(payment_result['interest_paid'])) + Decimal(str(payment_result['principal_paid']))
             credit_account.credit_balance += total_paid
             credit_account.total_credit_used -= total_paid
             
-            # Check if fully repaid
-            if order.is_fully_paid:
+            # ✅ Update last repayment date
+            credit_account.last_repayment_date = timezone.now()
+            
+            # ✅ Check if all loans are fully paid
+            has_active_loans = Order.objects.filter(
+                buyer=user,
+                upfront_payment_status='PAID',
+                is_fully_paid=False,
+                loan_start_date__isnull=False
+            ).exclude(id=order.id).exists()
+            
+            # If this was the last loan and now paid, set status to ACTIVE
+            if order.is_fully_paid and not has_active_loans:
                 credit_account.loan_status = 'ACTIVE'
             
             credit_account.save()
@@ -714,7 +728,7 @@ def confirm_loan_repayment(request):
                 amount=total_paid,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"Loan repayment - Order {order.order_number}",
+                description=f"Loan repayment - Order {order.order_number} (Principal: ₦{payment_result['principal_paid']}, Interest: ₦{payment_result['interest_paid']})",
                 reference=payment_reference
             )
             
@@ -725,7 +739,7 @@ def confirm_loan_repayment(request):
             
             return Response({
                 'success': True,
-                'message': 'Repayment processed successfully!',
+                'message': 'Repayment processed successfully!' + (' Loan fully paid! 🎉' if payment_result['is_fully_paid'] else ''),
                 'payment': {
                     'amount_paid': str(total_paid),
                     'interest_paid': str(payment_result['interest_paid']),
@@ -735,6 +749,9 @@ def confirm_loan_repayment(request):
                 'credit_account': {
                     'new_balance': str(credit_account.credit_balance),
                     'available_credit': str(credit_account.credit_balance),
+                    'credit_limit': str(credit_account.credit_limit),
+                    'outstanding_balance': str(credit_account.credit_limit - credit_account.credit_balance),
+                    'loan_status': credit_account.loan_status,
                 },
                 'loan_status': {
                     'remaining_principal': str(payment_result['remaining_principal']),
