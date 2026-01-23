@@ -25,7 +25,7 @@ export default function OrdersTab({ orders, onCancelOrder }) {
     if (order.status === 'PENDING' && !order.is_cancelled) {
       return (
         <div className="p-2 bg-yellow-50 rounded text-xs text-yellow-800">
-          ⏳ Waiting for seller confirmation
+             Waiting for seller confirmation
         </div>
       );
     }

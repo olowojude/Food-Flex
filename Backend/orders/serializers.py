@@ -240,14 +240,14 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     
     # NEW METHODS
     def get_loan_details(self, obj):
-    # ✅ Only show loan details if upfront paid AND loan activated
+    #   Only show loan details if upfront paid AND loan activated
         if obj.upfront_payment_status != 'PAID':
             return {
                 'status': 'UPFRONT_PENDING',
                 'message': '10% upfront payment required'
             }
         
-        # ✅ Check if loan is activated (seller confirmed)
+        #   Check if loan is activated (seller confirmed)
         if not obj.loan_start_date:
             return {
                 'status': 'PENDING_CONFIRMATION',
@@ -260,7 +260,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
                 'order_status': obj.status,
             }
         
-        # ✅ Loan is active - show full details
+        #   Loan is active - show full details
         # Update interest before returning
         obj.update_accrued_interest()
         
@@ -301,7 +301,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     
     def get_payment_status(self, obj):
         """Get user-friendly payment status"""
-        # ✅ Check if loan is even activated
+        #   Check if loan is even activated
         if not obj.loan_start_date:
             if obj.upfront_payment_status == 'PAID':
                 return {
@@ -316,7 +316,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
                     'color': 'orange'
                 }
         
-        # ✅ Loan is active - check payment status
+        #   Loan is active - check payment status
         if obj.is_fully_paid:
             return {
                 'status': 'PAID',

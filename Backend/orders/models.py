@@ -516,7 +516,7 @@ class Order(models.Model):
         self.status = self.OrderStatus.CONFIRMED
         self.confirmed_at = timezone.now()
         
-        # ✅ ACTIVATE LOAN NOW (not at checkout)
+        #   ACTIVATE LOAN NOW (not at checkout)
         if self.upfront_payment_status == 'PAID' and not self.loan_start_date:
             self.activate_loan()
         

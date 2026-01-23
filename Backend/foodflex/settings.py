@@ -45,7 +45,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
-    'corsheaders.middleware.CorsMiddleware',  # ✅ MUST be before SessionMiddleware
+    'corsheaders.middleware.CorsMiddleware',  #   MUST be before SessionMiddleware
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -204,17 +204,17 @@ CSRF_TRUSTED_ORIGINS = [
 # ========================================
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_AGE = 1209600  # 2 weeks
-SESSION_SAVE_EVERY_REQUEST = True  # ✅ Force save on every request
+SESSION_SAVE_EVERY_REQUEST = True  #   Force save on every request
 SESSION_COOKIE_HTTPONLY = True
 
-# ✅ LOCAL DEVELOPMENT (HTTP)
+#   LOCAL DEVELOPMENT (HTTP)
 if DEBUG:
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SAMESITE = 'Lax'
     CSRF_COOKIE_SECURE = False
 else:
-    # ✅ PRODUCTION (HTTPS)
+    #   PRODUCTION (HTTPS)
     SESSION_COOKIE_SAMESITE = 'None'
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SAMESITE = 'None'

@@ -50,7 +50,7 @@ class Command(BaseCommand):
                     
                     self.stdout.write(
                         self.style.SUCCESS(
-                            f"\n✅ Order #{order.order_number}:\n"
+                            f"\n  Order #{order.order_number}:\n"
                             f"   Buyer: {order.buyer.get_full_name()}\n"
                             f"   Days pending: {days_pending}\n"
                             f"   Total: ₦{float(order.total_amount):,.2f}\n"

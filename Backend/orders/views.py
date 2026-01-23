@@ -287,7 +287,7 @@ def checkout(request):
         }
         
         request.session['pending_checkout'] = session_data
-        request.session.modified = True  # ✅ CRITICAL: Force save
+        request.session.modified = True  #   CRITICAL: Force save
         
     
         # Return payment breakdown
@@ -315,7 +315,7 @@ def checkout(request):
             status=status.HTTP_404_NOT_FOUND
         )
     except Exception as e:
-        print(f"❌ Checkout error: {str(e)}")
+        print(f" Checkout error: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response(
@@ -427,7 +427,7 @@ def confirm_checkout(request):
                 # Mark upfront as PAID (10% received)
                 order.upfront_payment_status = 'PAID'
                 
-                # ✅ DON'T activate loan yet - wait for confirmation
+                #   DON'T activate loan yet - wait for confirmation
                 # order.activate_loan()  ← REMOVED
                 
                 order.save()

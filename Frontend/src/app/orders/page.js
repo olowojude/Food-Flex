@@ -198,7 +198,7 @@ export default function OrdersPage() {
                       {/* Status Info */}
                       {order.status === 'PENDING' && !order.is_cancelled && (
                         <div className="mt-3 p-3 bg-yellow-50 rounded-lg text-sm text-yellow-800">
-                          ⏳ Waiting for seller confirmation. Show your QR code at pickup location.
+                             Waiting for seller confirmation. Show your QR code at pickup location.
                         </div>
                       )}
                       {order.status === 'CONFIRMED' && (

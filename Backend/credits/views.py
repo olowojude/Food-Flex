@@ -434,7 +434,7 @@ def get_active_loans(request):
             status=status.HTTP_403_FORBIDDEN
         )
     
-    # ✅ ONLY get CONFIRMED orders with activated loans
+    # ONLY get CONFIRMED orders with activated loans
     active_loans = Order.objects.filter(
         buyer=user,
         upfront_payment_status='PAID',
@@ -698,15 +698,15 @@ def confirm_loan_repayment(request):
             credit_account = user.credit_account
             old_balance = credit_account.credit_balance
             
-            # ✅ Restore credit (principal + interest paid)
+            #   Restore credit (principal + interest paid)
             total_paid = Decimal(str(payment_result['interest_paid'])) + Decimal(str(payment_result['principal_paid']))
             credit_account.credit_balance += total_paid
             credit_account.total_credit_used -= total_paid
             
-            # ✅ Update last repayment date
+            #   Update last repayment date
             credit_account.last_repayment_date = timezone.now()
             
-            # ✅ Check if all loans are fully paid
+            #   Check if all loans are fully paid
             has_active_loans = Order.objects.filter(
                 buyer=user,
                 upfront_payment_status='PAID',
