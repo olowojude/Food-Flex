@@ -303,7 +303,7 @@ def checkout(request):
                 'total_service_fee': float(service_fee),
                 'service_fee_duration_days': 30,
                 'total_repayment_due': float(total_repayment),
-                'daily_interest_rate': 0.2833,
+                'daily_interest_rate': 0.002833,
                 'grace_period_days': 5
             },
             'message': 'Review payment breakdown and confirm to proceed',

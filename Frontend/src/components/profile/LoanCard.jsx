@@ -146,12 +146,12 @@ export default function LoanCard({ loan, onRepayClick, onRefresh }) {
           <div className="flex items-start gap-2">
             <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
             <div className="text-sm">
-              <p className="font-semibold text-green-900 mb-1">
+              {/* <p className="font-semibold text-green-900 mb-1">
                 Pay Now & Save!
-              </p>
-              <p className="text-green-700">
+              </p> */}
+              {/* <p className="text-green-700">
                 If you pay <strong>today</strong>, you'll save <strong>₦{parseFloat(loan.potential_savings).toLocaleString()}</strong> in future interest!
-              </p>
+              </p> */}
               {loan.full_payment_bonus_eligible && (
                 <p className="text-green-800 mt-1">
                   <strong>Bonus:</strong> Pay in full within 30 days and get <strong>5% credit limit increase</strong>!

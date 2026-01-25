@@ -13,6 +13,7 @@ export default function RepaymentModal({
 }) {
   const [amount, setAmount] = useState('');
   const [breakdown, setBreakdown] = useState(null);
+  const [error, setError] = useState(''); // ✅ NEW: Validation errors
 
   if (!isOpen || !selectedLoan) return null;
 
@@ -23,6 +24,10 @@ export default function RepaymentModal({
 
   const handleAmountChange = (e) => {
     const value = e.target.value;
+    
+    // Clear error when user types
+    setError('');
+    
     if (value === '' || /^\d*\.?\d*$/.test(value)) {
       setAmount(value);
       calculateBreakdown(parseFloat(value) || 0);
@@ -30,7 +35,17 @@ export default function RepaymentModal({
   };
 
   const calculateBreakdown = (paymentAmount) => {
+    // ✅ Clear error
+    setError('');
+    
     if (paymentAmount <= 0) {
+      setBreakdown(null);
+      return;
+    }
+
+    // ✅ Validate amount
+    if (paymentAmount > totalDue) {
+      setError(`Amount cannot exceed total due of ₦${totalDue.toLocaleString()}`);
       setBreakdown(null);
       return;
     }
@@ -44,7 +59,7 @@ export default function RepaymentModal({
     const newInterest = accruedInterest - interestPayment;
     const newPrincipal = remainingPrincipal - principalPayment;
     const newTotalDue = newInterest + newPrincipal;
-    const willBeFullyPaid = newTotalDue <= 0;
+    const willBeFullyPaid = newTotalDue <= 0.01; // Allow small rounding
 
     // Calculate savings (avoided future interest)
     const daysRemaining = selectedLoan.days_remaining;
@@ -67,6 +82,7 @@ export default function RepaymentModal({
   const setQuickAmount = (percentage) => {
     const calculatedAmount = (totalDue * percentage / 100).toFixed(2);
     setAmount(calculatedAmount);
+    setError(''); // Clear error
     calculateBreakdown(parseFloat(calculatedAmount));
   };
 
@@ -74,17 +90,28 @@ export default function RepaymentModal({
     e.preventDefault();
     
     const paymentAmount = parseFloat(amount);
+    
+    // ✅ Enhanced validation
     if (!paymentAmount || paymentAmount <= 0) {
+      setError('Please enter an amount greater than zero');
       return;
     }
 
     if (paymentAmount > totalDue) {
+      setError(`Amount cannot exceed total due of ₦${totalDue.toLocaleString()}`);
+      return;
+    }
+
+    // ✅ Minimum payment validation (optional - at least ₦100)
+    if (paymentAmount < 100 && paymentAmount < totalDue) {
+      setError('Minimum payment is ₦100 (unless paying full amount)');
       return;
     }
 
     await onSubmit(selectedLoan.order_id, paymentAmount);
     setAmount('');
     setBreakdown(null);
+    setError('');
   };
 
   return (
@@ -165,10 +192,20 @@ export default function RepaymentModal({
                 value={amount}
                 onChange={handleAmountChange}
                 placeholder="0.00"
-                className="w-full pl-8 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full pl-8 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                  error ? 'border-red-500' : 'border-gray-300'
+                }`}
                 disabled={processing}
               />
             </div>
+            
+            {/* ✅ Error Message */}
+            {error && (
+              <div className="mt-2 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
             
             {/* Quick Amount Buttons */}
             <div className="flex gap-2 mt-2">
@@ -208,7 +245,7 @@ export default function RepaymentModal({
           </div>
 
           {/* Payment Breakdown */}
-          {breakdown && (
+          {breakdown && !error && (
             <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
               <h3 className="font-semibold text-gray-900">Payment Breakdown</h3>
               
@@ -253,10 +290,10 @@ export default function RepaymentModal({
                   <div className="flex items-start gap-2">
                     <CheckCircle className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
                     <div className="text-sm text-green-800">
-                      <p className="font-semibold mb-1">You'll Save!</p>
+                      {/* <p className="font-semibold mb-1">You'll Save!</p>
                       <p>
                         By paying ₦{parseFloat(amount).toLocaleString()} now, you'll avoid <strong>₦{breakdown.savedInterest.toLocaleString()}</strong> in future interest!
-                      </p>
+                      </p> */}
                     </div>
                   </div>
                 </div>
@@ -268,7 +305,7 @@ export default function RepaymentModal({
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-5 h-5 text-yellow-600 shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-800">
-                      <p className="font-semibold mb-1"> Bonus Alert!</p>
+                      <p className="font-semibold mb-1">Bonus Alert!</p>
                       <p>
                         You're eligible for a <strong>5% credit limit increase</strong> by paying in full within 30 days!
                       </p>
@@ -306,7 +343,7 @@ export default function RepaymentModal({
               type="submit"
               variant="primary"
               loading={processing}
-              disabled={!amount || parseFloat(amount) <= 0 || parseFloat(amount) > totalDue}
+              disabled={!amount || parseFloat(amount) <= 0 || !!error}
               className="flex-1"
             >
               {processing ? 'Processing...' : 'Confirm Payment'}

@@ -193,6 +193,45 @@ class SellerProfile(models.Model):
     def increment_order_count(self):
         self.total_orders_fulfilled += 1
         self.save()
+
+    def add_earnings(self, amount):
+        """
+        Add earnings to seller wallet
+        NOTE: Only called when order is COMPLETED (not cancelled)
+        """
+        self.wallet_balance += amount
+        self.total_earnings += amount
+        self.save()
+    
+    def remove_earnings(self, amount):
+        """
+        Remove earnings if order is cancelled
+        (Only if order was completed before cancellation - unlikely but possible)
+        """
+        self.wallet_balance -= amount
+        self.total_earnings -= amount
+        if self.total_earnings < 0:
+            self.total_earnings = 0
+        if self.wallet_balance < 0:
+            self.wallet_balance = 0
+        self.save()
+    
+    def increment_order_count(self):
+        """
+        Increment fulfilled orders count
+        NOTE: Only called when order is COMPLETED
+        """
+        self.total_orders_fulfilled += 1
+        self.save()
+    
+    def decrement_order_count(self):
+        """
+        Decrement if order is cancelled after being completed
+        (Edge case - unlikely but possible)
+        """
+        if self.total_orders_fulfilled > 0:
+            self.total_orders_fulfilled -= 1
+            self.save()
     
     @property
     def has_store_locations(self):

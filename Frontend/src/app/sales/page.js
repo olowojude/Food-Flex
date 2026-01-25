@@ -10,10 +10,175 @@ import Button from '@/components/common/Button';
 import QRScanner from '@/components/common/QRScanner';
 import Toast from '@/components/common/Toast';
 import { 
-  Package, ShoppingBag, 
-  CheckCircle, Clock, XCircle, Search, Eye, AlertCircle, Camera
+  Package, ShoppingBag, CheckCircle, Clock, XCircle, Search, 
+  Eye, AlertCircle, Camera, X, User, MapPin, Phone, Mail
 } from 'lucide-react';
 
+// ========================================
+// ORDER DETAIL MODAL COMPONENT
+// ========================================
+function OrderDetailModal({ order, isOpen, onClose }) {
+  if (!isOpen || !order) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">
+              Order #{order.order_number}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Status: <span className={`font-semibold ${
+                order.status === 'PENDING' ? 'text-yellow-600' :
+                order.status === 'CONFIRMED' ? 'text-blue-600' :
+                order.status === 'COMPLETED' ? 'text-green-600' :
+                'text-red-600'
+              }`}>{order.status}</span>
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          {/* Buyer Information */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <User className="w-5 h-5" />
+              Buyer Information
+            </h3>
+            <div className="grid sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Name:</span>
+                <span className="ml-2 font-medium text-gray-900">
+                  {order.buyer_name}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-600">Email:</span>
+                <span className="ml-2 font-medium text-gray-900">
+                  {order.buyer_email}
+                </span>
+              </div>
+              {order.buyer_phone && (
+                <div>
+                  <span className="text-gray-600">Phone:</span>
+                  <span className="ml-2 font-medium text-gray-900">
+                    {order.buyer_phone}
+                  </span>
+                </div>
+              )}
+              {order.buyer_address && (
+                <div className="sm:col-span-2">
+                  <span className="text-gray-600">Address:</span>
+                  <span className="ml-2 font-medium text-gray-900">
+                    {order.buyer_address}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Order Items */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              Order Items ({order.items_count || order.items?.length || 0})
+            </h3>
+            <div className="space-y-3">
+              {order.items?.map((item, index) => (
+                <div key={index} className="flex gap-4 p-3 bg-gray-50 rounded-lg">
+                  {item.product_image && (
+                    <img
+                      src={item.product_image}
+                      alt={item.product_name}
+                      className="w-16 h-16 object-cover rounded"
+                    />
+                  )}
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900">{item.product_name}</p>
+                    <p className="text-sm text-gray-600">
+                      ₦{parseFloat(item.product_price).toLocaleString()} × {item.quantity}
+                    </p>
+                    <p className="text-sm font-bold text-gray-900 mt-1">
+                      Subtotal: ₦{parseFloat(item.subtotal).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Order Summary */}
+          <div className="border border-gray-200 rounded-lg p-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Order Summary
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Total Amount:</span>
+                <span className="font-bold text-gray-900">
+                  ₦{parseFloat(order.total_amount).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Order Date:</span>
+                <span className="font-medium text-gray-900">
+                  {new Date(order.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              {order.confirmed_at && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Confirmed At:</span>
+                  <span className="font-medium text-gray-900">
+                    {new Date(order.confirmed_at).toLocaleDateString()}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Action Hint */}
+          {order.status === 'PENDING' && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Next Step:</strong> Scan the buyer's QR code to confirm this order and start the pickup process.
+              </p>
+            </div>
+          )}
+
+          {order.status === 'CONFIRMED' && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-sm text-green-800">
+                ✅ <strong>Order Confirmed!</strong> Complete the order after the buyer receives their items.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-lg transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
+// MAIN SALES PAGE COMPONENT
+// ========================================
 export default function SalesPage() {
   const router = useRouter();
   const { user, isAuthenticated, isSeller } = useAuth();
@@ -26,6 +191,11 @@ export default function SalesPage() {
   const [scanningOrderId, setScanningOrderId] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [toast, setToast] = useState(null);
+  
+  // Detail Modal State
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -86,26 +256,20 @@ export default function SalesPage() {
     setShowScanner(true);
   };
 
-  // FIXED handleScanSuccess function
   const handleScanSuccess = async ({ orderData, qrData }) => {
-    
     setShowScanner(false);
     setProcessing(true);
 
     try {
-      // Send QR data to backend for verification
-      
       const response = await orderAPI.verifyQRCode({ 
         qr_data: JSON.stringify(orderData) 
       });
-      
       
       if (response.data.success && response.data.order) {
         const orderId = response.data.order.id;
         
         showToast('QR verified! OTP generated. Redirecting...', 'success');
         
-        //  REDIRECT TO ORDER DETAIL PAGE with scan flag
         setTimeout(() => {
           router.push(`/orders/${orderId}?scan=true`);
         }, 1000);
@@ -138,6 +302,22 @@ export default function SalesPage() {
       fetchOrders();
     } catch (error) {
       showToast(error.response?.data?.error || 'Failed to complete order', 'error');
+    }
+  };
+
+  // NEW: View order details handler
+  const handleViewDetails = async (order) => {
+    try {
+      // If order doesn't have items, fetch full details
+      if (!order.items || order.items.length === 0) {
+        const response = await orderAPI.getOrderDetail(order.id);
+        setSelectedOrder(response.data);
+      } else {
+        setSelectedOrder(order);
+      }
+      setShowDetailModal(true);
+    } catch (error) {
+      showToast('Failed to load order details', 'error');
     }
   };
 
@@ -198,8 +378,10 @@ export default function SalesPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
+      {/* Toasts */}
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       
+      {/* QR Scanner Modal */}
       {showScanner && (
         <QRScanner
           onScanSuccess={handleScanSuccess}
@@ -212,7 +394,18 @@ export default function SalesPage() {
         />
       )}
 
+      {/* Order Detail Modal */}
+      <OrderDetailModal
+        order={selectedOrder}
+        isOpen={showDetailModal}
+        onClose={() => {
+          setShowDetailModal(false);
+          setSelectedOrder(null);
+        }}
+      />
+
       <div className="container mx-auto px-4">
+        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Sales & Orders</h1>
           <p className="text-gray-600">Manage your customer orders and track sales</p>
@@ -380,7 +573,7 @@ export default function SalesPage() {
                     {order.status === 'PENDING' && (
                       <div className="mt-3 p-3 bg-yellow-100 rounded-lg border border-yellow-300">
                         <p className="text-sm text-yellow-800 font-medium">
-                           Scan buyer's QR code to generate OTP and confirm order.
+                          📸 Scan buyer's QR code to generate OTP and confirm order.
                         </p>
                       </div>
                     )}
@@ -388,6 +581,16 @@ export default function SalesPage() {
 
                   {/* Action Buttons */}
                   <div className="flex flex-col gap-2 md:w-48">
+                    {/* View Details Button (Always Show) */}
+                    <Button
+                      variant="secondary"
+                      onClick={() => handleViewDetails(order)}
+                      className="w-full"
+                    >
+                      <Eye className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+
                     {order.status === 'PENDING' && (
                       <Button
                         variant="primary"
@@ -401,31 +604,14 @@ export default function SalesPage() {
                     )}
 
                     {order.status === 'CONFIRMED' && (
-                      <>
-                        <Link href={`/orders/${order.id}`}>
-                          <Button variant="secondary" className="w-full">
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Details
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="success"
-                          onClick={() => handleCompleteOrder(order.id)}
-                          className="w-full"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-2" />
-                          Complete Order
-                        </Button>
-                      </>
-                    )}
-
-                    {(order.status === 'COMPLETED' || order.status === 'CANCELLED') && (
-                      <Link href={`/orders/${order.id}`}>
-                        <Button variant="secondary" className="w-full">
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="success"
+                        onClick={() => handleCompleteOrder(order.id)}
+                        className="w-full"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Complete Order
+                      </Button>
                     )}
                   </div>
                 </div>

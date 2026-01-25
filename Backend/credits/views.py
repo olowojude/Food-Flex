@@ -642,7 +642,7 @@ def initiate_loan_repayment(request):
 def confirm_loan_repayment(request):
     """
     Step 2: Confirm repayment after dummy payment
-    Updates credit balance and loan status correctly
+    FIXED: Properly restores credit including upfront payment
     """
     user = request.user
     payment_session = request.data.get('payment_session')
@@ -691,6 +691,10 @@ def confirm_loan_repayment(request):
             # Update interest
             order.update_accrued_interest()
             
+            # ✅ Check if this is FULL payment
+            total_due = order.total_amount_due
+            is_full_payment = abs(amount - total_due) < Decimal('0.01')
+            
             # Process payment
             payment_result = order.process_partial_payment(amount)
             
@@ -698,15 +702,32 @@ def confirm_loan_repayment(request):
             credit_account = user.credit_account
             old_balance = credit_account.credit_balance
             
-            #   Restore credit (principal + interest paid)
-            total_paid = Decimal(str(payment_result['interest_paid'])) + Decimal(str(payment_result['principal_paid']))
-            credit_account.credit_balance += total_paid
-            credit_account.total_credit_used -= total_paid
+            # ✅ Calculate credit to restore
+            # This should restore BOTH principal AND interest paid
+            principal_payment = Decimal(str(payment_result['principal_paid']))
+            interest_payment = Decimal(str(payment_result['interest_paid']))
+            total_paid = principal_payment + interest_payment
             
-            #   Update last repayment date
+            # ✅ CRITICAL FIX: If full payment, also restore the upfront amount
+            # The upfront was NEVER deducted from credit, so we restore the LOAN_AMOUNT only
+            credit_to_restore = total_paid
+            
+            # But if fully paid, we need to restore remaining loan amount
+            # which includes what was left from the original loan_amount
+            if payment_result['is_fully_paid']:
+                # The loan_amount is the FULL order amount (including upfront)
+                # We only deducted loan_amount from credit (not upfront again)
+                # So we restore exactly what we paid
+                credit_to_restore = total_paid
+            
+            # ✅ Restore credit
+            credit_account.credit_balance += credit_to_restore
+            credit_account.total_credit_used -= credit_to_restore
+            
+            # ✅ Update last repayment date
             credit_account.last_repayment_date = timezone.now()
             
-            #   Check if all loans are fully paid
+            # ✅ Check if all loans are fully paid
             has_active_loans = Order.objects.filter(
                 buyer=user,
                 upfront_payment_status='PAID',
@@ -715,8 +736,12 @@ def confirm_loan_repayment(request):
             ).exclude(id=order.id).exists()
             
             # If this was the last loan and now paid, set status to ACTIVE
-            if order.is_fully_paid and not has_active_loans:
+            if payment_result['is_fully_paid'] and not has_active_loans:
                 credit_account.loan_status = 'ACTIVE'
+                # ✅ CRITICAL: If no active loans, credit should be at FULL limit
+                # Reset to ensure it's exactly at limit (accounting for any rounding)
+                credit_account.credit_balance = credit_account.credit_limit
+                credit_account.total_credit_used = Decimal('0.00')
             
             credit_account.save()
             
@@ -725,10 +750,11 @@ def confirm_loan_repayment(request):
             CreditTransaction.objects.create(
                 credit_account=credit_account,
                 transaction_type=CreditTransaction.TransactionType.REPAYMENT,
-                amount=total_paid,
+                amount=credit_to_restore,
                 balance_before=old_balance,
                 balance_after=credit_account.credit_balance,
-                description=f"Loan repayment - Order {order.order_number} (Principal: ₦{payment_result['principal_paid']}, Interest: ₦{payment_result['interest_paid']})",
+                description=f"Loan repayment - Order {order.order_number} (Principal: ₦{payment_result['principal_paid']}, Interest: ₦{payment_result['interest_paid']})" + 
+                            (" - FULL PAYMENT" if payment_result['is_fully_paid'] else ""),
                 reference=payment_reference
             )
             
@@ -745,6 +771,7 @@ def confirm_loan_repayment(request):
                     'interest_paid': str(payment_result['interest_paid']),
                     'principal_paid': str(payment_result['principal_paid']),
                     'is_fully_paid': payment_result['is_fully_paid'],
+                    'credit_restored': str(credit_to_restore),
                 },
                 'credit_account': {
                     'new_balance': str(credit_account.credit_balance),

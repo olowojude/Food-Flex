@@ -65,7 +65,7 @@ export default function CreditTab({
                 </div>
               </div>
               <p className="text-green-100 text-sm mb-4">
-                💡 Pay FULL balance within 30 days to get 5% credit limit bonus!
+                Pay FULL balance within 30 days to get 5% credit limit bonus!
               </p>
               <Button
                 onClick={onRepaymentClick}
@@ -155,7 +155,7 @@ export default function CreditTab({
                 ₦{totalInterest.toLocaleString()}
               </p>
               <p className="text-xs text-orange-700 mt-1">
-                Growing daily at 0.283%
+                Growing daily at 0.00283%
               </p>
             </div>
           </div>
