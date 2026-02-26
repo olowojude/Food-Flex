@@ -240,6 +240,10 @@ HYDROGEN_PUBLIC_KEY = os.environ.get('HYDROGEN_PUBLIC_KEY')
 
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
+KUDISMS_API_TOKEN = os.environ.get('KUDISMS_API_TOKEN')
+KUDISMS_SENDER_ID = os.environ.get('KUDISMS_SENDER_ID', 'FoodFlex')
+KUDISMS_API_URL = os.environ.get('KUDISMS_API_URL', 'https://my.kudisms.net/api/v1')
+
 # Jazzmin Configuration
 JAZZMIN_SETTINGS = {
     "site_title": "FoodFlex Admin",

@@ -18,6 +18,7 @@ from io import BytesIO
 import base64
 from collections import defaultdict
 from django.utils import timezone
+from credits.sms_utils import send_order_confirmation_sms
 
 
 # Cart Views
@@ -501,6 +502,17 @@ def confirm_checkout(request):
             if 'pending_checkout' in request.session:
                 del request.session['pending_checkout']
                 request.session.modified = True
+
+            # NEW: Send SMS confirmation to buyer
+            for order in created_orders:
+                try:
+                    success, response = send_order_confirmation_sms(order)
+                    if success:
+                        print(f"SMS sent to buyer for order {order.order_number}")
+                    else:
+                        print(f"SMS failed for order {order.order_number}: {response}")
+                except Exception as e:
+                    print(f"SMS error: {str(e)}")
             
             # Serialize orders
             from .serializers import OrderDetailSerializer
