@@ -147,7 +147,7 @@ export default function ActiveLoansTab({ onRepayClick }) {
       </div>
 
       {/* Payment Tips */}
-      <div className="card p-6 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
+      <div className="card p-6 bg-linear-to-r from-green-50 to-emerald-50 border border-green-200">
         <div className="flex items-start gap-3">
           <Calendar className="w-6 h-6 text-green-600 shrink-0 mt-0.5" />
           <div>

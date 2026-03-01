@@ -57,6 +57,111 @@ class User(AbstractUser):
     is_seller_approved = models.BooleanField(default=False)
     username = models.CharField(max_length=150, unique=True)
     
+    phone_verified = models.BooleanField(
+        default=False,
+        help_text="Whether phone number has been verified via OTP"
+    )
+    phone_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When phone was verified"
+    )
+    
+    bvn_number = models.CharField(
+        max_length=11,
+        blank=True,
+        null=True,
+        help_text="Bank Verification Number (11 digits)"
+    )
+    bvn_verified = models.BooleanField(
+        default=False,
+        help_text="Whether BVN has been verified"
+    )
+    bvn_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When BVN was verified"
+    )
+    
+    # OTP Fields
+    phone_otp = models.CharField(
+        max_length=6,
+        blank=True,
+        null=True,
+        help_text="Current OTP for phone verification"
+    )
+    phone_otp_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When OTP was generated"
+    )
+    phone_otp_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When OTP expires (10 minutes)"
+    )
+    
+    def is_fully_verified(self):
+        """Check if user has completed all verifications"""
+        return self.phone_verified and self.bvn_verified
+    
+    def can_checkout(self):
+        """Check if buyer can checkout"""
+        if self.role != 'BUYER':
+            return False
+        return self.is_fully_verified()
+    
+    def can_withdraw(self):
+        """Check if seller can withdraw funds"""
+        if self.role != 'SELLER':
+            return False
+        return self.is_fully_verified()
+    
+    def generate_phone_otp(self):
+        """Generate 6-digit OTP for phone verification"""
+        import random
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        self.phone_otp = ''.join(random.choices('0123456789', k=6))
+        self.phone_otp_created_at = timezone.now()
+        self.phone_otp_expires_at = timezone.now() + timedelta(minutes=10)
+        self.save()
+        
+        return self.phone_otp
+    
+    def verify_phone_otp(self, otp_input):
+        """Verify OTP and mark phone as verified"""
+        from django.utils import timezone
+        
+        if not self.phone_otp:
+            return False, "No OTP generated"
+        
+        if timezone.now() > self.phone_otp_expires_at:
+            return False, "OTP expired. Request a new one."
+        
+        if self.phone_otp == otp_input:
+            self.phone_verified = True
+            self.phone_verified_at = timezone.now()
+            self.phone_otp = None  # Clear OTP
+            self.phone_otp_created_at = None
+            self.phone_otp_expires_at = None
+            self.save()
+            return True, "Phone verified successfully!"
+        else:
+            return False, "Invalid OTP code"
+    
+    def get_verification_status(self):
+        """Get user's verification status"""
+        return {
+            'phone_verified': self.phone_verified,
+            'phone_verified_at': self.phone_verified_at.isoformat() if self.phone_verified_at else None,
+            'bvn_verified': self.bvn_verified,
+            'bvn_verified_at': self.bvn_verified_at.isoformat() if self.bvn_verified_at else None,
+            'is_fully_verified': self.is_fully_verified(),
+            'can_checkout': self.can_checkout() if self.role == 'BUYER' else None,
+            'can_withdraw': self.can_withdraw() if self.role == 'SELLER' else None,
+        }
     class Meta:
         verbose_name = 'User'
         verbose_name_plural = 'Users'

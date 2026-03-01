@@ -157,7 +157,7 @@ export default function LoanCard({ loan, onRepayClick, onRefresh }) {
             <TrendingUp className="w-4 h-4 text-green-600 shrink-0 mt-0.5" />
             <div className="text-xs text-green-800">
               <p className="font-medium mb-1">Save ₦{potentialSavings.toLocaleString()} by paying now!</p>
-              <p>Interest accrues at ₦{dailyInterest.toLocaleString()} per day</p>
+              {/* <p>Pay today instead of waiting {daysRemaining} more days</p> */}
             </div>
           </div>
         </div>

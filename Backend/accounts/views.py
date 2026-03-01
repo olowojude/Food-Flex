@@ -15,6 +15,10 @@ from credits.models import CreditAccount
 from orders.models import Cart
 from accounts.permissions import IsAdmin, IsSeller, IsBuyer
 from rest_framework.permissions import IsAuthenticated
+from credits.sms_utils import send_sms
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -321,6 +325,240 @@ def delete_user(request, user_id):
             {'message': f'User {user_email} deleted successfully'},
             status=status.HTTP_200_OK
         )
+        
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def get_verification_status(request):
+    """
+    Get current user's verification status
+    """
+    user = request.user
+    
+    return Response({
+        'phone_number': user.phone_number,
+        'phone_verified': user.phone_verified,
+        'phone_verified_at': user.phone_verified_at.isoformat() if user.phone_verified_at else None,
+        
+        'bvn_number': user.bvn_number[-4:] if user.bvn_number else None,  # Last 4 digits only
+        'bvn_verified': user.bvn_verified,
+        'bvn_verified_at': user.bvn_verified_at.isoformat() if user.bvn_verified_at else None,
+        
+        'is_fully_verified': user.is_fully_verified(),
+        'can_checkout': user.can_checkout() if user.role == 'BUYER' else None,
+        'can_withdraw': user.can_withdraw() if user.role == 'SELLER' else None,
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def send_phone_verification_otp(request):
+    """
+    Send OTP to user's phone number for verification
+    """
+    user = request.user
+    
+    # Check if phone number exists
+    if not user.phone_number:
+        return Response(
+            {'error': 'No phone number found. Please add a phone number first.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Check if already verified
+    if user.phone_verified:
+        return Response(
+            {'error': 'Phone number already verified.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Generate OTP
+    otp = user.generate_phone_otp()
+    
+    # Send OTP via SMS
+    message = (
+        f"FoodFlex Verification\n"
+        f"Your OTP: {otp}\n"
+        f"Valid for 10 minutes.\n"
+        f"Do not share this code."
+    )
+    
+    success, response = send_sms(user.phone_number, message)
+    
+    if success:
+        logger.info(f"OTP sent to {user.phone_number} for user {user.id}")
+        return Response({
+            'success': True,
+            'message': f'OTP sent to {user.phone_number}',
+            'expires_at': user.phone_otp_expires_at.isoformat(),
+        }, status=status.HTTP_200_OK)
+    else:
+        logger.error(f"Failed to send OTP to {user.phone_number}: {response}")
+        return Response(
+            {'error': 'Failed to send OTP. Please try again.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def verify_phone_otp(request):
+    """
+    Verify OTP and mark phone as verified
+    """
+    user = request.user
+    otp_input = request.data.get('otp')
+    
+    if not otp_input:
+        return Response(
+            {'error': 'OTP is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Verify OTP
+    success, message = user.verify_phone_otp(otp_input)
+    
+    if success:
+        logger.info(f"Phone verified for user {user.id}")
+        return Response({
+            'success': True,
+            'message': message,
+            'phone_verified': True,
+            'phone_verified_at': user.phone_verified_at.isoformat(),
+        }, status=status.HTTP_200_OK)
+    else:
+        return Response(
+            {'error': message},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def submit_bvn(request):
+    """
+    Submit BVN for verification (placeholder for external verification)
+    """
+    user = request.user
+    bvn = request.data.get('bvn')
+    
+    if not bvn:
+        return Response(
+            {'error': 'BVN is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate BVN format (11 digits)
+    if not bvn.isdigit() or len(bvn) != 11:
+        return Response(
+            {'error': 'Invalid BVN. Must be 11 digits.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Check if already verified
+    if user.bvn_verified:
+        return Response(
+            {'error': 'BVN already verified.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Save BVN
+    user.bvn_number = bvn
+    user.save()
+    
+    # TODO: Integrate with external BVN verification service
+    # For now, return pending status
+    
+    logger.info(f"BVN submitted for user {user.id}")
+    
+    return Response({
+        'success': True,
+        'message': 'BVN submitted successfully. Verification pending.',
+        'bvn_last_4': bvn[-4:],
+        'status': 'pending',
+    }, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def verify_bvn(request):
+    """
+    Verify BVN (admin/automated verification)
+    This endpoint would be called by your BVN verification service webhook
+    """
+    user_id = request.data.get('user_id')
+    bvn = request.data.get('bvn')
+    verification_status = request.data.get('status')  # 'verified' or 'failed'
+    
+    # In production, verify webhook signature here
+    
+    try:
+        user = User.objects.get(id=user_id)
+        
+        if verification_status == 'verified':
+            user.bvn_verified = True
+            user.bvn_verified_at = timezone.now()
+            user.save()
+            
+            logger.info(f"BVN verified for user {user_id}")
+            
+            return Response({
+                'success': True,
+                'message': 'BVN verified successfully',
+            }, status=status.HTTP_200_OK)
+        else:
+            logger.warning(f"BVN verification failed for user {user_id}")
+            return Response({
+                'success': False,
+                'message': 'BVN verification failed',
+            }, status=status.HTTP_400_BAD_REQUEST)
+            
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'User not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAdminUser])
+def admin_verify_bvn(request, user_id):
+    """
+    Admin endpoint to manually verify BVN
+    """
+    try:
+        user = User.objects.get(id=user_id)
+        
+        if not user.bvn_number:
+            return Response(
+                {'error': 'User has not submitted BVN'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        user.bvn_verified = True
+        user.bvn_verified_at = timezone.now()
+        user.save()
+        
+        logger.info(f"BVN manually verified by admin for user {user_id}")
+        
+        return Response({
+            'success': True,
+            'message': f'BVN verified for user {user.get_full_name()}',
+            'user': {
+                'id': user.id,
+                'name': user.get_full_name(),
+                'bvn_last_4': user.bvn_number[-4:],
+                'bvn_verified': user.bvn_verified,
+                'bvn_verified_at': user.bvn_verified_at.isoformat(),
+            }
+        }, status=status.HTTP_200_OK)
         
     except User.DoesNotExist:
         return Response(
