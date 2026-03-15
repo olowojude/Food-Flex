@@ -17,11 +17,12 @@ import CreditTab from '@/components/profile/CreditTab';
 import SecurityTab from '@/components/profile/SecurityTab';
 import ActiveLoansTab from '@/components/profile/ActiveLoansTab';
 import RepaymentModal from '@/components/profile/RepaymentModal';
+import VerificationTab from '@/components/profile/VerificationTab'; // NEW
 
 function ProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated, isLoading, isBuyer, updateUser } = useAuth();
+  const { user, isAuthenticated, isLoading, isBuyer, updateUser, refreshUser } = useAuth();
   
   const [creditAccount, setCreditAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -35,7 +36,7 @@ function ProfileContent() {
   const [selectedLoan, setSelectedLoan] = useState(null);
   const [processingPayment, setProcessingPayment] = useState(false);
   
-  //   NEW: Track refresh trigger for child components
+  // Track refresh trigger for child components
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   // Cancel order state
@@ -76,7 +77,6 @@ function ProfileContent() {
     }
   }, [isAuthenticated, isLoading, user, router]);
 
-  //   ENHANCED: Comprehensive data fetch
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -93,7 +93,6 @@ function ProfileContent() {
         const ordersData = ordersRes.data.results || ordersRes.data.orders || ordersRes.data;
         setOrders(Array.isArray(ordersData) ? ordersData.slice(0, 5) : []);
         
-        //   Trigger refresh in child components
         setRefreshTrigger(prev => prev + 1);
       }
     } catch (error) {
@@ -166,12 +165,10 @@ function ProfileContent() {
     setShowRepaymentModal(true);
   };
 
-  //   ENHANCED: Repayment with full refresh
   const handleRepaymentSubmit = async (orderId, amount) => {
     try {
       setProcessingPayment(true);
       
-      // Step 1: Initiate repayment
       showToast('Calculating payment breakdown...', 'warning');
       const initiateRes = await creditAPI.initiateLoanRepayment({
         order_id: orderId,
@@ -180,11 +177,9 @@ function ProfileContent() {
       
       const paymentSession = initiateRes.data.payment_session;
       
-      // Step 2: Dummy payment (2 seconds)
       showToast('Processing payment...', 'warning');
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      // Step 3: Confirm repayment
       const confirmRes = await creditAPI.confirmLoanRepayment({
         payment_session: paymentSession,
         payment_reference: `DUMMY_REPAY_${Date.now()}`
@@ -192,21 +187,16 @@ function ProfileContent() {
       
       showToast(confirmRes.data.message || 'Repayment successful!', 'success');
       
-      //   CRITICAL: Close modal FIRST, then refresh
       setShowRepaymentModal(false);
       setSelectedLoan(null);
       setProcessingPayment(false);
       
-      //   Wait a bit for backend to finalize
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      //   Comprehensive refresh
       await fetchData();
       
-      //   Show updated credit
       const creditRes = await creditAPI.getMyCreditAccount();
       showToast(
-        `  Payment processed! Available credit: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
+        `Payment processed! Available credit: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
         'success'
       );
       
@@ -216,12 +206,10 @@ function ProfileContent() {
     }
   };
 
-  //   ENHANCED: Cancellation with full refresh
   const handleCancelOrder = async (orderId, reason) => {
     try {
       const response = await orderAPI.cancelOrder(orderId, { reason });
       
-      //   Show detailed refund info
       const refundInfo = response.data.refunded_amount || {};
       const creditRefund = refundInfo.credit_refund || 0;
       const upfrontRefund = refundInfo.upfront_refund || 0;
@@ -232,16 +220,12 @@ function ProfileContent() {
         'success'
       );
       
-      //   Wait for backend to process
       await new Promise(resolve => setTimeout(resolve, 500));
-      
-      //   Comprehensive refresh
       await fetchData();
       
-      //   Show updated credit
       const creditRes = await creditAPI.getMyCreditAccount();
       showToast(
-        `  Credit restored! Available: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
+        `Credit restored! Available: ₦${parseFloat(creditRes.data.credit_balance).toLocaleString()}`,
         'success'
       );
       
@@ -338,7 +322,7 @@ function ProfileContent() {
               <OrdersTab
                 orders={orders}
                 onCancelOrder={openCancelModal}
-                key={`orders-${refreshTrigger}`} //   Force refresh
+                key={`orders-${refreshTrigger}`}
               />
             )}
 
@@ -347,14 +331,23 @@ function ProfileContent() {
                 creditAccount={creditAccount}
                 transactions={transactions}
                 onRepaymentClick={() => setActiveTab('loans')}
-                key={`credit-${refreshTrigger}`} //   Force refresh
+                key={`credit-${refreshTrigger}`}
               />
             )}
 
             {activeTab === 'loans' && isBuyer && (
               <ActiveLoansTab
                 onRepayClick={handleRepaymentClick}
-                key={`loans-${refreshTrigger}`} //   Force refresh
+                key={`loans-${refreshTrigger}`}
+              />
+            )}
+
+            {/* NEW: Verification Tab */}
+            {activeTab === 'verification' && (
+              <VerificationTab
+                user={user}
+                onUserUpdate={refreshUser}
+                onShowToast={showToast}
               />
             )}
 

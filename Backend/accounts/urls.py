@@ -1,25 +1,32 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
 
-app_name = 'accounts'
-
 urlpatterns = [
-    # Authentication
+    # Auth
     path('register/', views.register, name='register'),
     path('login/', views.login, name='login'),
     path('logout/', views.logout, name='logout'),
-    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
-    path('profile/', views.user_profile, name='user_profile'),
-    path('profile/password/', views.change_password, name='change_password'),
-    
-    path('profile/business/', views.seller_profile, name='seller_profile'),
-    path('profile/business/update/', views.update_seller_profile, name='update_seller_profile'),
-    
-    path('users/', views.list_users, name='list_users'),
-    path('users/<int:user_id>/', views.user_detail, name='user_detail'),
-    path('users/<int:user_id>/update/', views.update_user, name='update_user'),
-    path('users/<int:user_id>/delete/', views.delete_user, name='delete_user'),
 
+    # Profile
+    path('profile/', views.user_profile, name='user-profile'),
+    path('profile/password/', views.change_password, name='change-password'),
+    path('profile/business/', views.seller_profile, name='seller-profile'),
+    path('profile/business/update/', views.update_seller_profile, name='update-seller-profile'),
+
+    # Admin - User Management
+    path('users/', views.list_users, name='list-users'),
+    path('users/<int:user_id>/', views.user_detail, name='user-detail'),
+    path('users/<int:user_id>/update/', views.update_user, name='update-user'),
+    path('users/<int:user_id>/delete/', views.delete_user, name='delete-user'),
+
+    # ── Phone Verification ──────────────────────────────────────────
+    path('verification/status/', views.get_verification_status, name='verification-status'),
+    path('verification/phone/send-otp/', views.send_phone_verification_otp, name='send-phone-otp'),
+    path('verification/phone/verify-otp/', views.verify_phone_otp, name='verify-phone-otp'),
+
+    # ── BVN Verification ────────────────────────────────────────────
+    path('bvn/submit/', views.submit_bvn, name='submit-bvn'),
+
+    # ── Admin BVN ───────────────────────────────────────────────────
+    path('admin/verify-bvn/<int:user_id>/', views.admin_verify_bvn, name='admin-verify-bvn'),
 ]

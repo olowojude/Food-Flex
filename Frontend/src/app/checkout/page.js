@@ -11,7 +11,8 @@ import LoadingSpinner from '@/components/common/LoadingSpinner';
 import Toast from '@/components/common/Toast';
 import { 
   CreditCard, ShoppingBag, AlertCircle, CheckCircle, 
-  Store, DollarSign, Calendar, TrendingUp, Info 
+  Store, DollarSign, Calendar, TrendingUp, Info,
+  ShieldAlert, ArrowRight, Phone
 } from 'lucide-react';
 
 export default function CheckoutPage() {
@@ -25,7 +26,10 @@ export default function CheckoutPage() {
   const [checkoutSession, setCheckoutSession] = useState(null);
   const [error, setError] = useState('');
   const [toast, setToast] = useState(null);
-  const [step, setStep] = useState('review'); // 'review' or 'payment'
+  const [step, setStep] = useState('review'); // 'review' | 'payment'
+
+  // ── Verification gate state ─────────────────────────────────────
+  const [verificationBlocked, setVerificationBlocked] = useState(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -56,45 +60,41 @@ export default function CheckoutPage() {
   // Group cart items by seller
   const groupCartItemsBySeller = (cartItems) => {
     const grouped = {};
-    
     cartItems.forEach(item => {
       const sellerId = item.product.seller || 'unknown';
       const sellerName = item.product.seller_store_name || 'Unknown Seller';
-      
       if (!grouped[sellerId]) {
-        grouped[sellerId] = {
-          seller: {
-            id: sellerId,
-            name: sellerName
-          },
-          items: [],
-          subtotal: 0
-        };
+        grouped[sellerId] = { seller: { id: sellerId, name: sellerName }, items: [], subtotal: 0 };
       }
-      
       grouped[sellerId].items.push(item);
       grouped[sellerId].subtotal += parseFloat(item.total_price || 0);
     });
-    
     return Object.values(grouped);
   };
 
   const handleInitiateCheckout = async () => {
     setProcessing(true);
     setError('');
+    setVerificationBlocked(false);
 
     try {
-      // Step 1: Get payment breakdown
       const response = await orderAPI.initiateCheckout();
-      
       setPaymentBreakdown(response.data.breakdown);
       setCheckoutSession(response.data.checkout_session);
       setStep('payment');
-      
       showToast('Review payment details below', 'success');
+    } catch (err) {
+      const data = err.response?.data;
 
-    } catch (error) {
-      const errorMessage = error.response?.data?.error || 'Failed to initiate checkout';
+      // ── Phone verification gate ──────────────────────────────────
+      if (err.response?.status === 403 && data?.redirect === 'verification') {
+        setVerificationBlocked(true);
+        setError('');
+        return;
+      }
+      // ────────────────────────────────────────────────────────────
+
+      const errorMessage = data?.error || 'Failed to initiate checkout';
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -107,35 +107,30 @@ export default function CheckoutPage() {
     setError('');
 
     try {
-      // Dummy payment - just wait 2 seconds to simulate payment
       showToast('Processing payment...', 'warning');
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Step 2: Confirm checkout with dummy payment reference
+
       const response = await orderAPI.confirmCheckout({
         checkout_session: checkoutSession,
         payment_reference: `DUMMY_${Date.now()}`
       });
 
-      // Store orders AND QR code
       const orders = response.data.orders;
       const qrCode = response.data.qr_code_base64;
-      
+
       sessionStorage.setItem('checkout_orders', JSON.stringify(orders));
       sessionStorage.setItem('checkout_qr', qrCode);
       sessionStorage.setItem('payment_info', JSON.stringify(response.data.payment_info));
 
-      // Clear cart context
       await fetchCart();
-
       showToast('Payment successful! Redirecting...', 'success');
 
       setTimeout(() => {
         router.push('/checkout/success');
       }, 1000);
 
-    } catch (error) {
-      const errorMessage = error.response?.data?.error || 'Payment failed';
+    } catch (err) {
+      const errorMessage = err.response?.data?.error || 'Payment failed';
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {
@@ -143,24 +138,13 @@ export default function CheckoutPage() {
     }
   };
 
+  // ── Loading / auth guards ────────────────────────────────────────
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="xl" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><LoadingSpinner size="xl" /></div>;
   }
-
-  if (!isAuthenticated || !isBuyer) {
-    return null;
-  }
-
+  if (!isAuthenticated || !isBuyer) return null;
   if (loading || cartLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="xl" />
-      </div>
-    );
+    return <div className="min-h-screen flex items-center justify-center"><LoadingSpinner size="xl" /></div>;
   }
 
   const cartItems = cart?.items || [];
@@ -195,6 +179,42 @@ export default function CheckoutPage() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Checkout</h1>
         <p className="text-gray-600 mb-8">Pay 10% now, pay the rest over 30 days</p>
 
+        {/* ── Phone Verification Blocked Banner ───────────────────── */}
+        {verificationBlocked && (
+          <div className="mb-6 p-5 bg-amber-50 border border-amber-200 rounded-xl">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-amber-900 mb-1">Phone Verification Required</h3>
+                <p className="text-sm text-amber-700 mb-3">
+                  You need to verify your phone number before you can checkout. This helps us 
+                  send your order confirmation and pickup details via SMS.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={() => router.push('/profile?tab=verification')}
+                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors"
+                  >
+                    <Phone className="w-4 h-4" />
+                    Verify Phone Number
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setVerificationBlocked(false)}
+                    className="text-sm text-amber-700 hover:text-amber-900 underline underline-offset-2 px-2 py-2"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* ────────────────────────────────────────────────────────── */}
+
+        {/* General error */}
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
@@ -223,7 +243,7 @@ export default function CheckoutPage() {
             {/* Cart Items */}
             <div className="card p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Order Items</h2>
-              
+
               {groupedCart.map((sellerGroup) => (
                 <div key={sellerGroup.seller.id} className="mb-6 last:mb-0">
                   <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-200">
@@ -280,9 +300,21 @@ export default function CheckoutPage() {
                   <span className="ml-2 font-medium text-gray-900">{user?.email}</span>
                 </div>
                 {user?.phone_number && (
-                  <div>
+                  <div className="flex items-center gap-2">
                     <span className="text-gray-600">Phone:</span>
-                    <span className="ml-2 font-medium text-gray-900">{user?.phone_number}</span>
+                    <span className="font-medium text-gray-900">{user?.phone_number}</span>
+                    {user?.phone_verified ? (
+                      <span className="flex items-center gap-1 text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full border border-green-100 font-medium">
+                        <CheckCircle className="w-3 h-3" /> Verified
+                      </span>
+                    ) : (
+                      <Link
+                        href="/profile?tab=verification"
+                        className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200 font-medium hover:bg-amber-100 transition-colors"
+                      >
+                        <AlertCircle className="w-3 h-3" /> Verify now
+                      </Link>
+                    )}
                   </div>
                 )}
                 {user?.address && (
@@ -312,7 +344,6 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              {/* Payment Breakdown */}
               {step === 'review' ? (
                 <>
                   <div>
@@ -320,9 +351,7 @@ export default function CheckoutPage() {
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
                         <span className="text-gray-600">Cart Total</span>
-                        <span className="font-medium text-gray-900">
-                          ₦{subtotal.toLocaleString()}
-                        </span>
+                        <span className="font-medium text-gray-900">₦{subtotal.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-600">Total Items</span>
@@ -342,13 +371,26 @@ export default function CheckoutPage() {
                       <div className="flex items-start gap-2">
                         <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-sm font-medium text-red-900 mb-1">
-                            Insufficient Credit
-                          </p>
+                          <p className="text-sm font-medium text-red-900 mb-1">Insufficient Credit</p>
                           <p className="text-xs text-red-700">
                             You need ₦{(subtotal - availableCredit).toLocaleString()} more credit
                           </p>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Phone unverified nudge inside payment card */}
+                  {user?.phone_number && !user?.phone_verified && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-800">
+                          <strong>Phone not verified.</strong> You'll need to verify it before checkout.{' '}
+                          <Link href="/profile?tab=verification" className="underline font-medium">
+                            Verify now →
+                          </Link>
+                        </p>
                       </div>
                     </div>
                   )}
@@ -365,7 +407,6 @@ export default function CheckoutPage() {
                 </>
               ) : (
                 <>
-                  {/* BNPL Payment Breakdown */}
                   {paymentBreakdown && (
                     <div className="space-y-4">
                       <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
@@ -384,17 +425,14 @@ export default function CheckoutPage() {
                           <span className="text-gray-600">Cart Total</span>
                           <span className="font-medium">₦{parseFloat(paymentBreakdown.cart_total).toLocaleString()}</span>
                         </div>
-                        
                         <div className="flex justify-between">
                           <span className="text-gray-600">Upfront (10%)</span>
                           <span className="font-medium text-green-600">₦{parseFloat(paymentBreakdown.upfront_payment).toLocaleString()}</span>
                         </div>
-                        
                         <div className="flex justify-between">
                           <span className="text-gray-600">Principal (90%)</span>
                           <span className="font-medium">₦{parseFloat(paymentBreakdown.principal_amount).toLocaleString()}</span>
                         </div>
-                        
                         <div className="flex justify-between items-center">
                           <div className="flex items-center gap-1">
                             <span className="text-gray-600">Service Fee</span>
@@ -402,7 +440,6 @@ export default function CheckoutPage() {
                           </div>
                           <span className="font-medium">₦{parseFloat(paymentBreakdown.total_service_fee).toLocaleString()}</span>
                         </div>
-                        
                         <div className="pt-2 border-t">
                           <div className="flex justify-between mb-2">
                             <span className="font-semibold text-gray-900">Total to Repay</span>
@@ -420,7 +457,6 @@ export default function CheckoutPage() {
                             <ul className="space-y-1">
                               <li>• Pay anytime within 30 days</li>
                               <li>• Pay early to save on interest!</li>
-                              {/* <li>• 5-day grace period after due date</li> */}
                             </ul>
                           </div>
                         </div>
@@ -436,6 +472,16 @@ export default function CheckoutPage() {
                         </div>
                       </div>
 
+                      {/* SMS notice */}
+                      <div className="p-3 bg-green-50 border border-green-100 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <Phone className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                          <p className="text-xs text-green-800">
+                            An SMS confirmation with your order details and pickup location will be sent to <strong>{user?.phone_number}</strong> after payment.
+                          </p>
+                        </div>
+                      </div>
+
                       <Button
                         onClick={handleDummyPayment}
                         variant="primary"
@@ -445,10 +491,6 @@ export default function CheckoutPage() {
                         <CheckCircle className="w-5 h-5 inline mr-2" />
                         {processing ? 'Processing...' : `Pay ₦${parseFloat(paymentBreakdown.upfront_payment).toLocaleString()} Now`}
                       </Button>
-
-                      <p className="text-xs text-gray-600 text-center">
-                        {/* Secure dummy payment (testing mode) */}
-                      </p>
                     </div>
                   )}
                 </>

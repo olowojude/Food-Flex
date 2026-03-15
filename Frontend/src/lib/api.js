@@ -76,6 +76,14 @@ export const authAPI = {
   
   getSellerProfile: () => api.get('/accounts/profile/business/'),
   updateSellerProfile: (data) => api.put('/accounts/profile/business/update/', data),
+
+  // ── Phone Verification ──────────────────────────────────────
+  getVerificationStatus: () => api.get('/accounts/verification/status/'),
+  sendPhoneVerificationOTP: () => api.post('/accounts/verification/phone/send-otp/'),
+   verifyPhoneOTP: (data) => api.post('/accounts/verification/phone/verify-otp/', data),
+
+  // ── BVN Verification ────────────────────────────────────────
+  submitBvn: (data) => api.post('/accounts/bvn/submit/', data),
 };
 
 // ========================================

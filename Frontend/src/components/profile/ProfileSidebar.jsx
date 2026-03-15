@@ -1,6 +1,6 @@
 'use client';
 
-import { User, ShoppingBag, CreditCard, Lock, Upload, Camera, Wallet } from 'lucide-react';
+import { User, ShoppingBag, CreditCard, Lock, Upload, Camera, Wallet, ShieldCheck } from 'lucide-react';
 
 export default function ProfileSidebar({
   user,
@@ -15,7 +15,8 @@ export default function ProfileSidebar({
     { id: 'personal', label: 'Personal Info', icon: User, forBuyer: false },
     { id: 'orders', label: 'My Orders', icon: ShoppingBag, forBuyer: true },
     { id: 'credit', label: 'Credit Account', icon: CreditCard, forBuyer: true },
-    { id: 'loans', label: 'Active Loans', icon: Wallet, forBuyer: true }, // NEW
+    { id: 'loans', label: 'Active Loans', icon: Wallet, forBuyer: true },
+    { id: 'verification', label: 'Verification', icon: ShieldCheck, forBuyer: false }, // NEW
     { id: 'security', label: 'Security', icon: Lock, forBuyer: false },
   ];
 

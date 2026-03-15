@@ -6,3 +6,5 @@ export { default as OrdersTab } from './OrdersTab';
 export { default as CreditTab } from './CreditTab';
 export { default as SecurityTab } from './SecurityTab';
 export { default as RepaymentModal } from './RepaymentModal';
+export { default as ActiveLoansTab } from './ActiveLoansTab';
+export { default as VerificationTab } from './VerificationTab';
