@@ -582,7 +582,7 @@ class Order(models.Model):
             return
         
         # Calculate days elapsed
-        self.days_elapsed = (timezone.now() - self.loan_start_date).days
+        self.days_elapsed = (timezone.now().date() - self.loan_start_date.date()).days
         
         # Calculate accrued interest (daily rate * days * remaining principal)
         daily_interest = self.remaining_principal * self.daily_interest_rate
